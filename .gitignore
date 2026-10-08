@@ -1,0 +1,13 @@
+# Binary
+/tunnelward
+
+# Runtime data
+/data/
+*.db
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
