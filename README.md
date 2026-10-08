@@ -1,15 +1,48 @@
-# Tunnelward
+<p align="center">
+  <img src="internal/web/static/logo.svg" alt="Tunnelward logo: a dragon guarding a tunnel" width="160">
+</p>
 
-**Tunnelward** is a small, self-hosted WireGuard server with per-device access rules, managed from a
-web UI. It's a companion to the [TunnelVision](https://github.com/ap-andersson/tunnelvision) client.
+<h1 align="center">Tunnelward</h1>
+
+<p align="center">
+  A small, self-hosted WireGuard server with per-device access rules, managed from a web UI.
+</p>
+
+<p align="center">
+  <a href="https://github.com/ap-andersson/tunnelward/actions/workflows/test.yml"><img src="https://github.com/ap-andersson/tunnelward/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0d5c63" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/status-in%20development-9a6008" alt="Status: in development">
+</p>
+
+> [!WARNING]
+> **Tunnelward is in early development and has not been tested in a real deployment yet.**
+> It has automated tests, including ones that send real traffic through WireGuard in throwaway
+> network namespaces, but it hasn't been run on a real server with real devices over time.
+> It controls access into your home network, so review the generated firewall rules
+> (`docker exec tunnelward nft list table inet tunnelward`) and test from outside your network
+> before relying on it.
+
+> [!NOTE]
+> **This project was written by Claude, an AI model by Anthropic**, working with
+> [@ap-andersson](https://github.com/ap-andersson), who directed the design and decisions and
+> reviewed the result. Treat it like any other young codebase: read it before you trust it.
 
 Give your own laptop access to the whole home network, give a family member's phone internet access
 through your home connection and nothing else, and let the TV box reach only Jellyfin. All from one
-WireGuard server.
+WireGuard server. It's a companion to the [TunnelVision](https://github.com/ap-andersson/tunnelvision)
+desktop client.
 
 The goal is a codebase small enough to read end to end, so you can trust what it does to your network.
 
-This project was created with the assistance of Claude (Anthropic).
+<p align="center">
+  <img src="docs/screenshots/devices.png" alt="The device list: each device's address, status, profiles, last handshake and traffic" width="900">
+</p>
+
+<details>
+<summary>Device page screenshot</summary>
+<br>
+<img src="docs/screenshots/device.png" alt="A device's page: summary, settings, custom rules and everything the device can reach" width="900">
+</details>
 
 ## Features
 
@@ -20,6 +53,8 @@ This project was created with the assistance of Claude (Anthropic).
 - **Default deny**: a device reaches only what its rules allow. That includes other devices, the LAN
   and the Tunnelward server itself.
 - **Live status**: last handshake and traffic per device.
+- **"What this device can reach"**: every device page lists exactly what it may access, and why.
+- Light and dark theme.
 - A single Docker container on a normal bridge network: one Go binary with SQLite inside, no external
   database.
 
