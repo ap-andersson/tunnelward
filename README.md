@@ -179,6 +179,19 @@ docker compose pull && docker compose up -d
 
 The database is migrated automatically on startup. Device configs keep working across updates.
 
+### Image tags
+
+| Tag                 | What it is                                                   |
+|---------------------|--------------------------------------------------------------|
+| `latest`            | The latest release                                           |
+| `1.2.3`, `1.2`      | A specific release                                           |
+| `edge`              | A build of the `main` branch, made on demand; may be broken  |
+| `<commit>`          | A test build of another branch, e.g. `5d9b559`              |
+
+Releases are built automatically when a version tag is pushed. `edge` and branch builds are made with
+*Run workflow* on the [Image](https://github.com/ap-andersson/tunnelward/actions/workflows/image.yml)
+workflow.
+
 ## Troubleshooting
 
 **The device connects, but nothing loads.**
