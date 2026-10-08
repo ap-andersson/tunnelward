@@ -1,0 +1,64 @@
+{{/* The rules editor, shared by device and profile pages. htmx swaps the
+     whole section; without JavaScript the forms post normally. */}}
+{{define "rules"}}
+<section id="rules">
+  <h2>{{if .IsDevice}}Custom rules{{else}}Rules{{end}}</h2>
+  <p class="muted">
+    {{- if .IsDevice}}Extra access for this device only, on top of its profiles.
+    {{- else}}Everything a device with this profile may reach. Anything not allowed is blocked.{{end}}
+  </p>
+  {{with .Error}}<p class="error" role="alert">{{.}}</p>{{end}}
+  <div class="overflow-auto">
+  <table>
+    <thead><tr><th>Destination</th><th>Protocol</th><th>Ports</th><th>Comment</th><th></th></tr></thead>
+    <tbody>
+    {{- range .Rules}}
+      <tr>
+        <td>{{ruleDest .}}</td><td>{{ruleProto .}}</td><td>{{rulePorts .}}</td><td>{{.Comment}}</td>
+        <td><form method="post" action="{{$.BaseURL}}/rules/{{.ID}}/delete"
+                  hx-post="{{$.BaseURL}}/rules/{{.ID}}/delete" hx-target="#rules" hx-swap="outerHTML">
+          <button class="secondary outline">Remove</button></form></td>
+      </tr>
+    {{- else}}
+      <tr><td colspan="5" class="muted">No rules yet.</td></tr>
+    {{- end}}
+    </tbody>
+  </table>
+  </div>
+  <form method="post" action="{{.BaseURL}}/rules" hx-post="{{.BaseURL}}/rules" hx-target="#rules" hx-swap="outerHTML" class="rule-form">
+    <input name="destination" value="{{.Form.Destination}}" placeholder="internet or 192.168.1.10" aria-label="Destination" required>
+    <select name="protocol" aria-label="Protocol">
+      {{- range protocols}}
+      <option value="{{.}}"{{if eq (print .) $.Form.Protocol}} selected{{end}}>{{protoLabel .}}</option>
+      {{- end}}
+    </select>
+    <input name="ports" value="{{.Form.Ports}}" placeholder="Ports" aria-label="Ports">
+    <input name="comment" value="{{.Form.Comment}}" placeholder="Comment" aria-label="Comment" maxlength="200">
+    <button>Add</button>
+  </form>
+  <p class="muted"><small>Destination: <code>internet</code>, an address like <code>192.168.1.10</code> or a network like <code>192.168.1.0/24</code>. <code>internet</code> means every public address: nothing on your home network, other devices or the Tunnelward server. Ports: one like <code>443</code> or a range like <code>8000-8100</code>.</small></p>
+
+  {{- if .IsDevice}}
+  <h2>What this device can reach</h2>
+  {{- if .Effective}}
+  <div class="overflow-auto">
+  <table>
+    <thead><tr><th>Destination</th><th>Protocol</th><th>Ports</th><th>From</th></tr></thead>
+    <tbody>
+    {{- range .Effective}}
+      <tr><td>{{ruleDest .Rule}}</td><td>{{ruleProto .Rule}}</td><td>{{rulePorts .Rule}}</td><td>{{.Source}}</td></tr>
+    {{- end}}
+    </tbody>
+  </table>
+  </div>
+  {{- else}}
+  <p>Nothing. This device can connect, but every packet is dropped.</p>
+  {{- end}}
+  {{- end}}
+</section>
+{{end}}
+
+{{define "status"}}
+{{- if .}}<span class="status{{if online .}} online{{end}}"></span>{{ago .LastHandshake}}
+{{- else}}<span class="status"></span>never{{end}}
+{{- end}}

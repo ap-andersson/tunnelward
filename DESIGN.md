@@ -25,7 +25,7 @@ Out of scope (deliberately):
 | Language | Go |
 | Storage | SQLite (`modernc.org/sqlite`, pure Go, no cgo), single file in the data dir |
 | Web | stdlib `net/http` + `html/template` + htmx + Pico CSS (both vendored, no JS build) |
-| Auth | One admin account, password hash, session cookie, CSRF token, login rate limit |
+| Auth | One admin account (bcrypt), set on a first-visit setup page; in-memory sessions, SameSite=Strict cookie, Go's `CrossOriginProtection` against CSRF, login rate limit |
 | Rule model | **Allow-only union**, default deny |
 | Client keys | **Generated server-side, shown once, never stored** (only public key kept) |
 | Firewall | Generate nftables **text**, validate with `nft -c`, apply atomically with `nft -f` |
@@ -167,7 +167,8 @@ Firewall goes before WireGuard so a new peer never exists without its rules.
 
 - Server private key: generated on first start, stored in `<data>/server.key` with mode 0600.
 - Client private keys: never stored. If lost, regenerate the device's keys.
-- Admin password: set via env on first start (or generated and printed to the log once), stored as a hash.
+- Admin password: chosen on the `/setup` page on first visit (only the first submission can succeed; startup logs a warning
+  until it's done), stored as a bcrypt hash. Changeable in Settings, which logs out all other sessions.
 
 ## Layout
 
@@ -178,8 +179,9 @@ internal/store/       SQLite, embedded migrations, queries
 internal/firewall/    ruleset rendering (pure) + apply via nft
 internal/wg/          interface + peer sync via netlink/wgctrl
 internal/reconcile/   database -> firewall + WireGuard, in a fail-closed order
-internal/auth/        password hashing, sessions, CSRF, rate limit
-internal/web/         handlers, templates, static (htmx)
+internal/auth/        password hashing, sessions, login rate limit
+internal/clientconf/  client config files (wg-quick format) and file names
+internal/web/         handlers, templates, static (htmx 2.0.4, Pico 2.1.1, vendored)
 ```
 
 ## Testing

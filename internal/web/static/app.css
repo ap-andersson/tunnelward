@@ -1,0 +1,29 @@
+/* Small additions to Pico. */
+nav.top { border-bottom: 1px solid var(--pico-muted-border-color); margin-bottom: 1.5rem; }
+nav.top .brand { text-decoration: none; }
+form.inline { display: inline; margin: 0; }
+form.inline button, td button, td a[role="button"] { margin: 0; padding: .3rem .7rem; font-size: .875rem; width: auto; }
+td form { margin: 0; }
+
+article.flash, article.error { padding: .75rem 1rem; margin-bottom: 1.5rem; }
+article.flash { border-left: 4px solid var(--pico-ins-color); }
+article.error { border-left: 4px solid var(--pico-del-color); }
+p.error { color: var(--pico-del-color); }
+
+.status { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; margin-right: .4rem; background: var(--pico-muted-border-color); }
+.status.online { background: var(--pico-ins-color); }
+.muted { color: var(--pico-muted-color); }
+
+.rule-form { display: grid; grid-template-columns: 2fr 1fr 1fr 2fr auto; gap: .5rem; align-items: start; }
+.rule-form > * { margin-bottom: 0; }
+@media (max-width: 768px) { .rule-form { grid-template-columns: 1fr; } }
+
+.qr { background: #fff; padding: .75rem; width: 100%; max-width: 360px; image-rendering: pixelated; border-radius: var(--pico-border-radius); }
+pre.config { white-space: pre-wrap; word-break: break-all; padding: 1rem; }
+.actions { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+.actions > * { margin-bottom: 0; }
+code.key { word-break: break-all; }
+
+/* Space between a page's main form and the sections below it. */
+#rules, main > h2 { margin-top: 2.5rem; }
+.actions + details { margin-top: 1.5rem; }

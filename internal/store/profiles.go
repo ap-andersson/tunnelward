@@ -81,6 +81,18 @@ func (s *Store) DeleteRule(ctx context.Context, id int64) error {
 	return checkAffected(s.db.ExecContext(ctx, "DELETE FROM rules WHERE id = ?", id))
 }
 
+// DeleteProfileRule deletes a rule only if it belongs to the profile.
+func (s *Store) DeleteProfileRule(ctx context.Context, profileID, ruleID int64) error {
+	return checkAffected(s.db.ExecContext(ctx,
+		"DELETE FROM rules WHERE id = ? AND profile_id = ?", ruleID, profileID))
+}
+
+// DeleteDeviceRule deletes a rule only if it belongs to the device.
+func (s *Store) DeleteDeviceRule(ctx context.Context, deviceID, ruleID int64) error {
+	return checkAffected(s.db.ExecContext(ctx,
+		"DELETE FROM rules WHERE id = ? AND device_id = ?", ruleID, deviceID))
+}
+
 // addRule inserts r owned by the given column ("profile_id" or "device_id").
 func (s *Store) addRule(ctx context.Context, ownerColumn string, ownerID int64, r *model.Rule) error {
 	if err := r.Normalize(); err != nil {

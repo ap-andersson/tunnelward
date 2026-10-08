@@ -12,6 +12,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/vishvananda/netlink"
 	"golang.zx2c4.com/wireguard/wgctrl"
@@ -239,4 +240,33 @@ func toIPNet(p netip.Prefix) net.IPNet {
 		IP:   p.Addr().AsSlice(),
 		Mask: net.CIDRMask(p.Bits(), p.Addr().BitLen()),
 	}
+}
+
+// PeerStatus is live information about a peer.
+type PeerStatus struct {
+	LastHandshake time.Time // zero if never
+	ReceiveBytes  int64
+	TransmitBytes int64
+}
+
+// PeerStatuses returns the status of every peer on the interface.
+func PeerStatuses(name string) (map[wgtypes.Key]PeerStatus, error) {
+	c, err := wgctrl.New()
+	if err != nil {
+		return nil, err
+	}
+	defer c.Close()
+	dev, err := c.Device(name)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[wgtypes.Key]PeerStatus, len(dev.Peers))
+	for _, p := range dev.Peers {
+		out[p.PublicKey] = PeerStatus{
+			LastHandshake: p.LastHandshakeTime,
+			ReceiveBytes:  p.ReceiveBytes,
+			TransmitBytes: p.TransmitBytes,
+		}
+	}
+	return out, nil
 }

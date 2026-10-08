@@ -5,15 +5,20 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
+
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
 	"github.com/ap-andersson/tunnelward/internal/reconcile"
 	"github.com/ap-andersson/tunnelward/internal/store"
+	"github.com/ap-andersson/tunnelward/internal/web"
 	"github.com/ap-andersson/tunnelward/internal/wg"
 )
 
@@ -23,13 +28,23 @@ type config struct {
 	DataDir   string // TW_DATA_DIR: database and server key
 	Interface string // TW_INTERFACE: WireGuard interface name
 	WGPort    int    // TW_WG_PORT: UDP port WireGuard listens on
+	HTTPAddr  string // TW_HTTP_ADDR: admin UI listen address
+	// TW_COOKIE_SECURE: set when the UI is served over HTTPS (e.g. behind a
+	// reverse proxy), so the session cookie is only sent over HTTPS.
+	CookieSecure bool
 }
 
 func loadConfig() (config, error) {
 	cfg := config{
 		DataDir:   env("TW_DATA_DIR", "/data"),
 		Interface: env("TW_INTERFACE", "wg0"),
+		HTTPAddr:  env("TW_HTTP_ADDR", ":8080"),
 	}
+	secure, err := strconv.ParseBool(env("TW_COOKIE_SECURE", "false"))
+	if err != nil {
+		return cfg, fmt.Errorf("TW_COOKIE_SECURE: %w", err)
+	}
+	cfg.CookieSecure = secure
 	port, err := strconv.Atoi(env("TW_WG_PORT", "51820"))
 	if err != nil || port < 1 || port > 65535 {
 		return cfg, fmt.Errorf("TW_WG_PORT: invalid port %q", os.Getenv("TW_WG_PORT"))
@@ -82,9 +97,41 @@ func run() error {
 		return err
 	}
 
-	<-ctx.Done()
+	ui, err := web.New(ctx, web.Config{
+		Store:           st,
+		Apply:           r.Reconcile,
+		Statuses:        func() (map[wgtypes.Key]wg.PeerStatus, error) { return wg.PeerStatuses(cfg.Interface) },
+		ServerPublicKey: key.PublicKey(),
+		ListenPort:      cfg.WGPort,
+		SecureCookies:   cfg.CookieSecure,
+	})
+	if err != nil {
+		return err
+	}
+	srv := &http.Server{
+		Addr:              cfg.HTTPAddr,
+		Handler:           ui.Handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
+	errc := make(chan error, 1)
+	go func() { errc <- srv.ListenAndServe() }()
+	slog.Info("admin UI listening", "addr", cfg.HTTPAddr)
+	if ui.NeedsSetup() {
+		slog.Warn("no admin password yet: open the admin UI now to set it. Until then, anyone who can reach the UI can set it.")
+	}
+
+	select {
+	case err := <-errc:
+		return fmt.Errorf("admin UI: %w", err)
+	case <-ctx.Done():
+	}
 	slog.Info("shutting down")
-	return nil
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return srv.Shutdown(shutdownCtx)
 }
 
 // ensureForwarding turns on IPv4 forwarding if it is off. In Docker this

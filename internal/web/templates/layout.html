@@ -1,0 +1,35 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}'>
+<title>{{.Title}} · Tunnelward</title>
+<link rel="stylesheet" href="/static/pico.min.css">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+<nav class="container top">
+  <ul><li><a href="/" class="brand"><strong>Tunnelward</strong></a></li></ul>
+  {{- if .LoggedIn}}
+  <ul>
+    <li><a href="/devices">Devices</a></li>
+    <li><a href="/profiles">Profiles</a></li>
+    <li><a href="/settings">Settings</a></li>
+    <li><form method="post" action="/logout" class="inline"><button class="secondary outline">Log out</button></form></li>
+  </ul>
+  {{- end}}
+</nav>
+<main class="container">
+{{- with .Flash}}
+<article class="flash" role="status">{{.}}</article>
+{{- end}}
+{{- with .Error}}
+<article class="error" role="alert">{{.}}</article>
+{{- end}}
+{{template "content" .}}
+</main>
+</body>
+</html>
+{{end}}

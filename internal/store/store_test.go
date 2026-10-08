@@ -130,8 +130,8 @@ func TestDeviceConflictsAndValidation(t *testing.T) {
 	a := newDevice(t, s, "phone")
 
 	dup := model.Device{Name: "phone", PublicKey: randomKey(t)}
-	if err := s.CreateDevice(ctx, &dup); !errors.Is(err, ErrConflict) {
-		t.Errorf("duplicate name: %v, want ErrConflict", err)
+	if err := s.CreateDevice(ctx, &dup); !errors.Is(err, ErrConflict) || err.Error() != "name already in use" {
+		t.Errorf("duplicate name: %v, want ErrConflict saying %q", err, "name already in use")
 	}
 	dup = model.Device{Name: "other", PublicKey: a.PublicKey}
 	if err := s.CreateDevice(ctx, &dup); !errors.Is(err, ErrConflict) {
@@ -268,5 +268,47 @@ func TestNotFound(t *testing.T) {
 		if !errors.Is(err, ErrNotFound) {
 			t.Errorf("%s: %v, want ErrNotFound", name, err)
 		}
+	}
+}
+
+func TestAdminPassword(t *testing.T) {
+	s := openTest(t)
+	ctx := t.Context()
+	if _, err := s.AdminPasswordHash(ctx); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("fresh database: %v, want ErrNotFound", err)
+	}
+	if err := s.UpdateAdminPassword(ctx, "x"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("update before setup: %v, want ErrNotFound", err)
+	}
+	if err := s.SetInitialAdminPassword(ctx, "first"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetInitialAdminPassword(ctx, "second"); !errors.Is(err, ErrConflict) {
+		t.Errorf("second setup: %v, want ErrConflict", err)
+	}
+	if err := s.UpdateAdminPassword(ctx, "changed"); err != nil {
+		t.Fatal(err)
+	}
+	if h, _ := s.AdminPasswordHash(ctx); h != "changed" {
+		t.Errorf("hash = %q, want changed", h)
+	}
+}
+
+func TestOwnedRuleDelete(t *testing.T) {
+	s := openTest(t)
+	ctx := t.Context()
+	a, b := newDevice(t, s, "a"), newDevice(t, s, "b")
+	r := model.Rule{Destination: "10.0.0.1"}
+	if err := s.AddDeviceRule(ctx, a.ID, &r); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteDeviceRule(ctx, b.ID, r.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("deleting another device's rule: %v, want ErrNotFound", err)
+	}
+	if err := s.DeleteProfileRule(ctx, 1, r.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("deleting a device rule as a profile rule: %v, want ErrNotFound", err)
+	}
+	if err := s.DeleteDeviceRule(ctx, a.ID, r.ID); err != nil {
+		t.Error(err)
 	}
 }

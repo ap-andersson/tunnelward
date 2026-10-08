@@ -1,0 +1,18 @@
+{{define "content"}}{{with .Data}}
+<h1>{{.Profile.Name}}</h1>
+<form method="post" action="/profiles/{{.Profile.ID}}">
+  <label>Name <input name="name" value="{{.Profile.Name}}" maxlength="64" required></label>
+  <label>Description <input name="description" value="{{.Profile.Description}}" maxlength="200"></label>
+  <button>Save</button>
+</form>
+
+{{template "rules" .Rules}}
+
+<h2>Used by</h2>
+{{- if .UsedBy}}
+<ul>{{range .UsedBy}}<li><a href="/devices/{{.ID}}">{{.Name}}</a>{{if not .Enabled}} <mark>disabled</mark>{{end}}</li>{{end}}</ul>
+{{- else}}
+<p class="muted">No devices.</p>
+{{- end}}
+<a href="/profiles/{{.Profile.ID}}/delete" role="button" class="secondary">Delete profile</a>
+{{end}}{{end}}

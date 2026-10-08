@@ -1,0 +1,38 @@
+{{define "content"}}{{with .Data}}
+<hgroup>
+  <h1>{{.Device.Name}}</h1>
+  <p>{{.Device.IP}} · {{if .Device.Enabled}}enabled{{else}}<mark>disabled</mark>{{end}} · last handshake {{template "status" .Status}}
+  {{- with .Status}} · {{bytes .ReceiveBytes}} up / {{bytes .TransmitBytes}} down{{end}}</p>
+</hgroup>
+
+<form method="post" action="/devices/{{.Device.ID}}">
+  <label>Name <input name="name" value="{{.Device.Name}}" maxlength="64" required></label>
+  <label><input type="checkbox" role="switch" name="enabled"{{if .Device.Enabled}} checked{{end}}> Enabled</label>
+  <fieldset>
+    <legend>Profiles</legend>
+    {{- range .Profiles}}
+    <label><input type="checkbox" name="profile" value="{{.ID}}"{{if index $.Data.Assigned .ID}} checked{{end}}> <a href="/profiles/{{.ID}}">{{.Name}}</a>
+      {{with .Description}}<small class="muted">{{.}}</small>{{end}}</label>
+    {{- else}}
+    <p class="muted">No profiles yet.</p>
+    {{- end}}
+  </fieldset>
+  <details>
+    <summary>Advanced</summary>
+    <label>Client allowed IPs
+      <input name="allowed_ips" value="{{.AllowedIPs}}">
+      <small>What the device sends through the tunnel. The default, <code>0.0.0.0/0, ::/0</code>, sends everything,
+      so IPv6 is blocked in the tunnel instead of bypassing the VPN. Changing this only affects newly generated configs.</small>
+    </label>
+  </details>
+  <button>Save</button>
+</form>
+
+{{template "rules" .Rules}}
+
+<h2>Keys and removal</h2>
+<div class="actions">
+  <a href="/devices/{{.Device.ID}}/regenerate" role="button" class="secondary outline">Generate new keys</a>
+  <a href="/devices/{{.Device.ID}}/delete" role="button" class="secondary">Delete device</a>
+</div>
+{{end}}{{end}}

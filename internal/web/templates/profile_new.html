@@ -1,0 +1,9 @@
+{{define "content"}}{{with .Data}}
+<h1>New profile</h1>
+<form method="post" action="/profiles">
+  <label>Name <input name="name" value="{{.Name}}" maxlength="64" placeholder="e.g. Home media" required autofocus></label>
+  <label>Description <input name="description" value="{{.Description}}" maxlength="200"></label>
+  <button>Create profile</button>
+</form>
+<p class="muted">You can add rules after creating it.</p>
+{{end}}{{end}}

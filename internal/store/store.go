@@ -125,7 +125,7 @@ func mapErr(err error) error {
 	if errors.As(err, &se) {
 		switch se.Code() {
 		case sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY:
-			return fmt.Errorf("%w: %s", ErrConflict, uniqueColumn(se.Error()))
+			return fmt.Errorf("%s %w", uniqueColumn(se.Error()), ErrConflict)
 		case sqlite3.SQLITE_CONSTRAINT_FOREIGNKEY:
 			return ErrNotFound
 		}
@@ -135,11 +135,12 @@ func mapErr(err error) error {
 
 // uniqueColumn extracts "name" from "... UNIQUE constraint failed: devices.name ...".
 func uniqueColumn(msg string) string {
-	_, after, ok := strings.Cut(msg, "constraint failed: ")
-	if !ok {
+	const marker = "constraint failed: "
+	i := strings.LastIndex(msg, marker)
+	if i < 0 {
 		return "value"
 	}
-	col, _, _ := strings.Cut(after, " ")
+	col, _, _ := strings.Cut(msg[i+len(marker):], " ")
 	if _, c, ok := strings.Cut(col, "."); ok {
 		col = c
 	}

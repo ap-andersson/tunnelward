@@ -1,0 +1,10 @@
+{{define "content"}}{{with .Data}}
+<article>
+  <h1>{{$.Title}}</h1>
+  <p>{{.Question}}</p>
+  <form method="post" action="{{.Action}}" class="actions">
+    <button>{{.Button}}</button>
+    <a href="{{.Cancel}}">Cancel</a>
+  </form>
+</article>
+{{end}}{{end}}

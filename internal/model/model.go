@@ -13,6 +13,17 @@ import (
 	"unicode/utf8"
 )
 
+// ValidationError is returned for invalid input. Its message is meant to be
+// shown to the user.
+type ValidationError struct{ err error }
+
+func (e *ValidationError) Error() string { return e.err.Error() }
+func (e *ValidationError) Unwrap() error { return e.err }
+
+func invalidf(format string, args ...any) error {
+	return &ValidationError{fmt.Errorf(format, args...)}
+}
+
 // Protocol is the transport protocol a rule matches.
 type Protocol string
 
@@ -59,7 +70,7 @@ func (r *Rule) Normalize() error {
 	} else {
 		p, err := parseIPv4Prefix(dest)
 		if err != nil {
-			return fmt.Errorf("destination: %w", err)
+			return invalidf("destination: %w", err)
 		}
 		r.Destination = p.String()
 	}
@@ -70,26 +81,26 @@ func (r *Rule) Normalize() error {
 	switch r.Protocol {
 	case ProtoAny, ProtoTCP, ProtoUDP, ProtoTCPUDP, ProtoICMP:
 	default:
-		return fmt.Errorf("protocol: unknown protocol %q", r.Protocol)
+		return invalidf("protocol: unknown protocol %q", r.Protocol)
 	}
 
 	if r.PortFrom == 0 && r.PortTo == 0 {
 		// any port
 	} else {
 		if !r.Protocol.HasPorts() {
-			return fmt.Errorf("ports: protocol %q has no ports", r.Protocol)
+			return invalidf("ports: protocol %q has no ports", r.Protocol)
 		}
 		if r.PortTo == 0 {
 			r.PortTo = r.PortFrom
 		}
 		if r.PortFrom < 1 || r.PortTo > 65535 || r.PortFrom > r.PortTo {
-			return fmt.Errorf("ports: invalid range %d-%d", r.PortFrom, r.PortTo)
+			return invalidf("ports: invalid range %d-%d", r.PortFrom, r.PortTo)
 		}
 	}
 
 	r.Comment = strings.TrimSpace(r.Comment)
 	if utf8.RuneCountInString(r.Comment) > maxCommentLen {
-		return fmt.Errorf("comment: longer than %d characters", maxCommentLen)
+		return invalidf("comment: longer than %d characters", maxCommentLen)
 	}
 	return nil
 }
@@ -120,7 +131,7 @@ func (p *Profile) Validate() error {
 		return err
 	}
 	if utf8.RuneCountInString(p.Description) > maxCommentLen {
-		return fmt.Errorf("description: longer than %d characters", maxCommentLen)
+		return invalidf("description: longer than %d characters", maxCommentLen)
 	}
 	return nil
 }
@@ -162,11 +173,11 @@ func (d *Device) Validate(s Settings) error {
 		return err
 	}
 	if len(d.ClientAllowedIPs) == 0 {
-		return errors.New("client allowed IPs: at least one prefix is required")
+		return invalidf("client allowed IPs: at least one prefix is required")
 	}
 	for i, p := range d.ClientAllowedIPs {
 		if !p.IsValid() || p != p.Masked() {
-			return fmt.Errorf("client allowed IPs: %s is not a valid network prefix", p)
+			return invalidf("client allowed IPs: %s is not a valid network prefix", p)
 		}
 		d.ClientAllowedIPs[i] = p
 	}
@@ -177,7 +188,7 @@ func (d *Device) Validate(s Settings) error {
 func ValidatePublicKey(k string) error {
 	b, err := base64.StdEncoding.DecodeString(k)
 	if err != nil || len(b) != 32 {
-		return errors.New("public key: not a valid WireGuard key")
+		return invalidf("public key: not a valid WireGuard key")
 	}
 	return nil
 }
@@ -202,28 +213,28 @@ var DefaultSettings = Settings{
 // Validate checks all settings fields.
 func (s *Settings) Validate() error {
 	if s.EndpointPort < 1 || s.EndpointPort > 65535 {
-		return fmt.Errorf("endpoint port: %d is out of range", s.EndpointPort)
+		return invalidf("endpoint port: %d is out of range", s.EndpointPort)
 	}
 	s.EndpointHost = strings.TrimSpace(s.EndpointHost)
 	if strings.ContainsFunc(s.EndpointHost, func(r rune) bool { return unicode.IsSpace(r) || r == '/' }) {
-		return errors.New("endpoint host: must be a host name or address")
+		return invalidf("endpoint host: must be a host name or address")
 	}
 	if !s.TunnelCIDR.IsValid() || !s.TunnelCIDR.Addr().Is4() || s.TunnelCIDR != s.TunnelCIDR.Masked() {
-		return errors.New("tunnel network: must be a masked IPv4 prefix such as 10.8.0.0/24")
+		return invalidf("tunnel network: must be a masked IPv4 prefix such as 10.8.0.0/24")
 	}
 	if b := s.TunnelCIDR.Bits(); b < 16 || b > 29 {
-		return errors.New("tunnel network: prefix length must be between /16 and /29")
+		return invalidf("tunnel network: prefix length must be between /16 and /29")
 	}
 	for _, a := range s.ClientDNS {
 		if !a.Is4() {
-			return fmt.Errorf("client DNS: %s is not an IPv4 address", a)
+			return invalidf("client DNS: %s is not an IPv4 address", a)
 		}
 	}
 	if s.MTU != 0 && (s.MTU < 1280 || s.MTU > 9000) {
-		return fmt.Errorf("MTU: %d is out of range (1280-9000, or 0 for default)", s.MTU)
+		return invalidf("MTU: %d is out of range (1280-9000, or 0 for default)", s.MTU)
 	}
 	if s.Keepalive < 0 || s.Keepalive > 3600 {
-		return fmt.Errorf("keepalive: %d is out of range", s.Keepalive)
+		return invalidf("keepalive: %d is out of range", s.Keepalive)
 	}
 	return nil
 }
@@ -246,13 +257,13 @@ func (s Settings) broadcast() netip.Addr {
 func (s Settings) CheckDeviceIP(ip netip.Addr) error {
 	switch {
 	case !ip.Is4():
-		return errors.New("IP: must be an IPv4 address")
+		return invalidf("IP: must be an IPv4 address")
 	case !s.TunnelCIDR.Contains(ip):
-		return fmt.Errorf("IP: %s is outside the tunnel network %s", ip, s.TunnelCIDR)
+		return invalidf("IP: %s is outside the tunnel network %s", ip, s.TunnelCIDR)
 	case ip == s.TunnelCIDR.Addr(), ip == s.broadcast():
-		return fmt.Errorf("IP: %s is the network or broadcast address", ip)
+		return invalidf("IP: %s is the network or broadcast address", ip)
 	case ip == s.ServerIP():
-		return fmt.Errorf("IP: %s is the server's address", ip)
+		return invalidf("IP: %s is the server's address", ip)
 	}
 	return nil
 }
@@ -300,13 +311,13 @@ func EffectiveRules(d Device, profiles map[int64]Profile) ([]SourcedRule, error)
 
 func validateName(name string) error {
 	if name == "" {
-		return errors.New("name: is required")
+		return invalidf("name: is required")
 	}
 	if utf8.RuneCountInString(name) > maxNameLen {
-		return fmt.Errorf("name: longer than %d characters", maxNameLen)
+		return invalidf("name: longer than %d characters", maxNameLen)
 	}
 	if strings.ContainsFunc(name, func(r rune) bool { return !unicode.IsPrint(r) }) {
-		return errors.New("name: contains control characters")
+		return invalidf("name: contains control characters")
 	}
 	return nil
 }
@@ -316,20 +327,20 @@ func parseIPv4Prefix(s string) (netip.Prefix, error) {
 	if strings.Contains(s, "/") {
 		var err error
 		if p, err = netip.ParsePrefix(s); err != nil {
-			return p, fmt.Errorf("%q is not an IPv4 address or network", s)
+			return p, invalidf("%q is not an IPv4 address or network", s)
 		}
 	} else {
 		a, err := netip.ParseAddr(s)
 		if err != nil {
-			return p, fmt.Errorf("%q is not an IPv4 address or network", s)
+			return p, invalidf("%q is not an IPv4 address or network", s)
 		}
 		p = netip.PrefixFrom(a, a.BitLen())
 	}
 	if !p.Addr().Is4() {
-		return p, fmt.Errorf("%q is not IPv4", s)
+		return p, invalidf("%q is not IPv4", s)
 	}
 	if p != p.Masked() {
-		return p, fmt.Errorf("%q has host bits set, did you mean %s?", s, p.Masked())
+		return p, invalidf("%q has host bits set, did you mean %s?", s, p.Masked())
 	}
 	return p, nil
 }
