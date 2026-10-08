@@ -1,0 +1,31 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Prepare for namespace tests
+        # The firewall and integration tests run nft and WireGuard inside
+        # unprivileged user namespaces. Ubuntu restricts those by default.
+        run: |
+          sudo apt-get update && sudo apt-get install -y nftables
+          sudo modprobe wireguard
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: go vet ./...
+      - run: go test -v ./... 2>&1 | tee test.log
+        shell: bash
+      - name: Fail if the namespace tests were skipped
+        run: |
+          ! grep -E -- "--- SKIP: (TestIntegration|TestRulesetLoads)" test.log

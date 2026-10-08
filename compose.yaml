@@ -1,0 +1,27 @@
+# Tunnelward on a normal Docker bridge network. The WireGuard interface,
+# firewall rules and IP forwarding all live inside the container, so
+# Tunnelward can't touch the host's firewall.
+services:
+  tunnelward:
+    image: ghcr.io/ap-andersson/tunnelward:latest
+    # Or build from a clone of the repository instead of pulling:
+    # build: .
+    container_name: tunnelward
+    restart: unless-stopped
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]          # manage wg0 and nftables inside the container
+    security_opt: [no-new-privileges:true]
+    read_only: true               # everything Tunnelward writes goes to /data
+    sysctls:
+      - net.ipv4.ip_forward=1
+    ports:
+      - "51820:51820/udp"         # WireGuard; forward this UDP port on your router
+      # Admin UI. Replace with your server's LAN IP so it isn't exposed elsewhere:
+      - "192.168.1.5:8080:8080"
+    volumes:
+      - tunnelward-data:/data     # database and server key: back this up
+    # environment:
+    #   TW_COOKIE_SECURE: "true"  # if you serve the UI through an HTTPS reverse proxy
+
+volumes:
+  tunnelward-data:
