@@ -15,7 +15,7 @@ import (
 )
 
 // MinPasswordLength is the minimum admin password length in characters.
-const MinPasswordLength = 10
+const MinPasswordLength = 8
 
 // bcrypt ignores everything after 72 bytes, so longer passwords are refused
 // rather than silently truncated.
