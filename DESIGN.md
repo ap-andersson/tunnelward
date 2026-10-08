@@ -181,7 +181,7 @@ internal/wg/          interface + peer sync via netlink/wgctrl
 internal/reconcile/   database -> firewall + WireGuard, in a fail-closed order
 internal/auth/        password hashing, sessions, login rate limit
 internal/clientconf/  client config files (wg-quick format) and file names
-internal/web/         handlers, templates, static (htmx 2.0.4, Pico 2.1.1, vendored)
+internal/web/         handlers, templates, static (htmx 2.0.4, Pico 2.1.1, Atkinson Hyperlegible Next + Mono, all vendored)
 ```
 
 ## Testing

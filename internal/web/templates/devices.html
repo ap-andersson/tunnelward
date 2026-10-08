@@ -1,27 +1,33 @@
 {{define "content"}}{{with .Data}}
-<div class="actions"><h1>Devices</h1><a href="/devices/new" role="button">Add device</a></div>
 {{- if .EndpointMissing}}
-<article class="error">Set the server's endpoint host in <a href="/settings">Settings</a> before adding devices.</article>
+<div class="callout warn">{{template "i-alert"}}<p>Set the endpoint host in <a href="/settings">Settings</a> before adding devices. It's how devices find the server.</p></div>
 {{- end}}
-{{- if .Devices}}
-<div class="overflow-auto">
-<table>
-  <thead><tr><th>Name</th><th>IP</th><th>Profiles</th><th>Last handshake</th><th>Traffic (up / down)</th><th></th></tr></thead>
-  <tbody>
-  {{- range .Devices}}
-    <tr>
-      <td><a href="/devices/{{.ID}}">{{.Name}}</a></td>
-      <td>{{.IP}}</td>
-      <td>{{range $i, $p := .Profiles}}{{if $i}}, {{end}}{{$p}}{{else}}<span class="muted">none</span>{{end}}</td>
-      <td>{{template "status" .Status}}</td>
-      <td>{{with .Status}}{{bytes .ReceiveBytes}} / {{bytes .TransmitBytes}}{{end}}</td>
-      <td>{{if not .Enabled}}<mark>disabled</mark>{{end}}</td>
-    </tr>
+<section class="panel">
+  <header>
+    <h1>Devices</h1>
+    <a href="/devices/new" role="button" class="btn-sm">{{template "i-plus"}}Add device</a>
+  </header>
+  {{- if .Devices}}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Name</th><th>Address</th><th>Status</th><th>Profiles</th><th>Last handshake</th><th>Sent</th><th>Received</th></tr></thead>
+    <tbody>
+    {{- range .Devices}}
+      <tr>
+        <td><a class="name" href="/devices/{{.ID}}">{{.Name}}</a></td>
+        <td class="mono">{{.IP}}</td>
+        <td>{{template "state" (state .Enabled .Status)}}</td>
+        <td>{{range .Profiles}}<span class="chip">{{.}}</span>{{else}}<span class="muted">None</span>{{end}}</td>
+        <td class="num">{{if .Status}}{{ago .Status.LastHandshake}}{{else}}<span class="muted">Never</span>{{end}}</td>
+        <td class="num">{{with .Status}}{{template "i-up"}} {{bytes .ReceiveBytes}}{{else}}<span class="muted">None</span>{{end}}</td>
+        <td class="num">{{with .Status}}{{template "i-down"}} {{bytes .TransmitBytes}}{{else}}<span class="muted">None</span>{{end}}</td>
+      </tr>
+    {{- end}}
+    </tbody>
+  </table>
+  </div>
+  {{- else}}
+  <div class="body"><p>No devices yet. Add one to get a QR code for the WireGuard app.</p></div>
   {{- end}}
-  </tbody>
-</table>
-</div>
-{{- else}}
-<p>No devices yet.</p>
-{{- end}}
+</section>
 {{end}}{{end}}

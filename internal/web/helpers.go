@@ -35,6 +35,7 @@ var funcs = template.FuncMap{
 		}
 		return fmt.Sprintf("%d–%d", r.PortFrom, r.PortTo)
 	},
+	"state":  stateOf,
 	"ago":    ago,
 	"bytes":  humanBytes,
 	"online": online,
@@ -50,6 +51,22 @@ func protoLabel(p model.Protocol) string {
 	return strings.ToUpper(string(p))
 }
 
+// deviceState is how a device is shown: online, offline or disabled.
+type deviceState struct {
+	Kind  string // CSS class and icon
+	Label string
+}
+
+func stateOf(enabled bool, st *wg.PeerStatus) deviceState {
+	switch {
+	case !enabled:
+		return deviceState{"disabled", "Disabled"}
+	case online(st):
+		return deviceState{"online", "Online"}
+	}
+	return deviceState{"offline", "Offline"}
+}
+
 // online reports whether a peer has had a handshake recently. WireGuard
 // re-handshakes every 2 minutes while traffic flows.
 func online(st *wg.PeerStatus) bool {
@@ -58,12 +75,12 @@ func online(st *wg.PeerStatus) bool {
 
 func ago(t time.Time) string {
 	if t.IsZero() {
-		return "never"
+		return "Never"
 	}
 	d := time.Since(t)
 	switch {
 	case d < time.Minute:
-		return "just now"
+		return "Just now"
 	case d < time.Hour:
 		return fmt.Sprintf("%d min ago", int(d.Minutes()))
 	case d < 48*time.Hour:

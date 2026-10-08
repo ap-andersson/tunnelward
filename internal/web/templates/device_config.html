@@ -1,17 +1,20 @@
 {{define "content"}}{{with .Data}}
-<h1>{{.Device.Name}}: {{if eq .What "created"}}device created{{else}}new keys{{end}}</h1>
-<article>
-  <p><strong>This is the only time this config is shown.</strong> It contains the device's private key,
-  which Tunnelward doesn't store. Scan or download it now. If it's lost, generate new keys.</p>
-  <img class="qr" src="{{.QR}}" alt="QR code with the WireGuard config">
-  <p class="muted"><small>Scan with the WireGuard app on a phone.</small></p>
-  <div class="actions">
-    <a href="{{.Download}}" download="{{.FileName}}" role="button">Download {{.FileName}}</a>
-    <a href="/devices/{{.Device.ID}}" role="button" class="secondary outline">Done</a>
+<section class="panel">
+  <header><h1 class="title">{{.Device.Name}}</h1><span class="muted">{{if eq .What "created"}}Device created{{else}}New keys generated{{end}}</span></header>
+  <div class="body">
+    <div class="callout warn">{{template "i-alert"}}<p><strong>This is the only time this config is shown.</strong>
+      It contains the device's private key, which Tunnelward doesn't store. Scan or download it now. If it's lost, generate new keys.</p></div>
+    <div class="config-grid">
+      <figure>
+        <img class="qr" src="{{.QR}}" alt="QR code with the WireGuard config">
+        <figcaption class="hint">Scan with the WireGuard app on a phone.</figcaption>
+      </figure>
+      <pre class="config">{{.Config}}</pre>
+    </div>
   </div>
-  <details>
-    <summary>Show config as text</summary>
-    <pre class="config">{{.Config}}</pre>
-  </details>
-</article>
+  <footer>
+    <a href="{{.Download}}" download="{{.FileName}}" role="button">{{template "i-download"}} Download {{.FileName}}</a>
+    <a href="/devices/{{.Device.ID}}" role="button" class="secondary outline">Done</a>
+  </footer>
+</section>
 {{end}}{{end}}

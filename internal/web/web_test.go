@@ -271,7 +271,7 @@ func TestRuleEditing(t *testing.T) {
 	// htmx: the rules section comes back, with the new rule.
 	resp, body := e.post(base+"/rules", url.Values{"destination": {"192.168.1.10"}, "protocol": {"tcp"}, "ports": {"8096"}, "comment": {"Jellyfin"}}, htmx...)
 	wantStatus(t, resp, body, http.StatusOK)
-	if !strings.HasPrefix(strings.TrimSpace(body), `<section id="rules">`) || !strings.Contains(body, "Jellyfin") || !strings.Contains(body, "8096") {
+	if !strings.HasPrefix(strings.TrimSpace(body), `<div id="rules">`) || !strings.Contains(body, "Jellyfin") || !strings.Contains(body, "8096") {
 		t.Fatalf("unexpected partial:\n%s", body)
 	}
 

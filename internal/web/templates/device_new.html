@@ -1,22 +1,24 @@
 {{define "content"}}{{with .Data}}
-<h1>Add device</h1>
 {{- if .EndpointMissing}}
-<article class="error">Set the server's endpoint host in <a href="/settings">Settings</a> first, so the device's config can be generated.</article>
+<div class="callout warn">{{template "i-alert"}}<p>Set the endpoint host in <a href="/settings">Settings</a> first, so the device's config can be generated.</p></div>
 {{- end}}
-<form method="post" action="/devices">
-  <label>Name
-    <input name="name" value="{{.Name}}" placeholder="e.g. Anna's phone" maxlength="64" required autofocus>
-  </label>
-  <fieldset>
-    <legend>Profiles</legend>
-    {{- range .Profiles}}
-    <label><input type="checkbox" name="profile" value="{{.ID}}"{{if index $.Data.Selected .ID}} checked{{end}}> {{.Name}}
-      {{with .Description}}<small class="muted">{{.}}</small>{{end}}</label>
-    {{- else}}
-    <p class="muted">No profiles yet.</p>
-    {{- end}}
-    <small>A device without profiles or custom rules can connect but reach nothing. Custom rules can be added after creating it.</small>
-  </fieldset>
-  <button{{if .EndpointMissing}} disabled{{end}}>Create device</button>
+<form method="post" action="/devices" class="panel">
+  <header><h1>Add device</h1></header>
+  <div class="body">
+    <label>Name
+      <input name="name" value="{{.Name}}" placeholder="e.g. Anna's phone" maxlength="64" required autofocus>
+    </label>
+    <fieldset class="checks">
+      <legend>Profiles</legend>
+      {{- range .Profiles}}
+      <label><input type="checkbox" name="profile" value="{{.ID}}"{{if index $.Data.Selected .ID}} checked{{end}}> {{.Name}}
+        {{- with .Description}} <small>{{.}}</small>{{end}}</label>
+      {{- else}}
+      <p class="muted">No profiles yet.</p>
+      {{- end}}
+    </fieldset>
+    <p class="hint">A device without profiles or custom rules can connect but reach nothing. You can add custom rules after creating it.</p>
+  </div>
+  <footer><button{{if .EndpointMissing}} disabled{{end}}>Create device</button><a href="/devices">Cancel</a></footer>
 </form>
 {{end}}{{end}}

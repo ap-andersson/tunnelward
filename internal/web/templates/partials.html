@@ -1,64 +1,93 @@
+{{/* Icons: inline SVG, sized to the text, hidden from screen readers. */}}
+{{define "svg"}}<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{end}}
+{{define "i-plus"}}{{template "svg"}}<path d="M12 5v14M5 12h14"/></svg>{{end}}
+{{define "i-online"}}{{template "svg"}}<circle cx="12" cy="12" r="6" fill="currentColor" stroke="none"/></svg>{{end}}
+{{define "i-offline"}}{{template "svg"}}<circle cx="12" cy="12" r="5.5"/></svg>{{end}}
+{{define "i-disabled"}}{{template "svg"}}<circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/></svg>{{end}}
+{{define "i-up"}}{{template "svg"}}<path d="M12 19V5M6 11l6-6 6 6"/></svg>{{end}}
+{{define "i-down"}}{{template "svg"}}<path d="M12 5v14M6 13l6 6 6-6"/></svg>{{end}}
+{{define "i-clock"}}{{template "svg"}}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>{{end}}
+{{define "i-check"}}{{template "svg"}}<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>{{end}}
+{{define "i-alert"}}{{template "svg"}}<path d="M12 3.5l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>{{end}}
+{{define "i-key"}}{{template "svg"}}<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/></svg>{{end}}
+{{define "i-trash"}}{{template "svg"}}<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>{{end}}
+{{define "i-download"}}{{template "svg"}}<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>{{end}}
+{{define "i-github"}}<svg class="icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>{{end}}
+
+{{/* A device's state badge. Takes the result of the "state" function. */}}
+{{define "state"}}<span class="state {{.Kind}}">
+  {{- if eq .Kind "online"}}{{template "i-online"}}{{else if eq .Kind "disabled"}}{{template "i-disabled"}}{{else}}{{template "i-offline"}}{{end}}
+  {{- .Label}}</span>{{end}}
+
+{{define "dest"}}{{if eq .Destination "internet"}}Internet{{else}}<span class="mono">{{ruleDest .}}</span>{{end}}{{end}}
+
 {{/* The rules editor, shared by device and profile pages. htmx swaps the
-     whole section; without JavaScript the forms post normally. */}}
+     whole block; without JavaScript the forms post normally. */}}
 {{define "rules"}}
-<section id="rules">
-  <h2>{{if .IsDevice}}Custom rules{{else}}Rules{{end}}</h2>
-  <p class="muted">
-    {{- if .IsDevice}}Extra access for this device only, on top of its profiles.
-    {{- else}}Everything a device with this profile may reach. Anything not allowed is blocked.{{end}}
-  </p>
-  {{with .Error}}<p class="error" role="alert">{{.}}</p>{{end}}
-  <div class="overflow-auto">
+<div id="rules">
+<section class="panel">
+  <header><h2>{{if .IsDevice}}Custom rules{{else}}Rules{{end}}</h2></header>
+  {{- with .Error}}
+  <div class="body"><div class="callout error" role="alert">{{template "i-alert"}}<p>{{.}}</p></div></div>
+  {{- end}}
+  <div class="table-wrap">
   <table>
     <thead><tr><th>Destination</th><th>Protocol</th><th>Ports</th><th>Comment</th><th></th></tr></thead>
     <tbody>
     {{- range .Rules}}
       <tr>
-        <td>{{ruleDest .}}</td><td>{{ruleProto .}}</td><td>{{rulePorts .}}</td><td>{{.Comment}}</td>
-        <td><form method="post" action="{{$.BaseURL}}/rules/{{.ID}}/delete"
+        <td>{{template "dest" .}}</td>
+        <td>{{ruleProto .}}</td>
+        <td class="mono">{{rulePorts .}}</td>
+        <td>{{.Comment}}</td>
+        <td class="fit"><form method="post" action="{{$.BaseURL}}/rules/{{.ID}}/delete"
                   hx-post="{{$.BaseURL}}/rules/{{.ID}}/delete" hx-target="#rules" hx-swap="outerHTML">
           <button class="secondary outline">Remove</button></form></td>
       </tr>
     {{- else}}
-      <tr><td colspan="5" class="muted">No rules yet.</td></tr>
+      <tr><td colspan="5" class="empty">
+        {{- if .IsDevice}}No custom rules. This device gets only what its profiles allow.
+        {{- else}}No rules yet. Devices with only this profile can't reach anything.{{end}}</td></tr>
     {{- end}}
     </tbody>
   </table>
   </div>
-  <form method="post" action="{{.BaseURL}}/rules" hx-post="{{.BaseURL}}/rules" hx-target="#rules" hx-swap="outerHTML" class="rule-form">
-    <input name="destination" value="{{.Form.Destination}}" placeholder="internet or 192.168.1.10" aria-label="Destination" required>
-    <select name="protocol" aria-label="Protocol">
-      {{- range protocols}}
-      <option value="{{.}}"{{if eq (print .) $.Form.Protocol}} selected{{end}}>{{protoLabel .}}</option>
-      {{- end}}
-    </select>
-    <input name="ports" value="{{.Form.Ports}}" placeholder="Ports" aria-label="Ports">
-    <input name="comment" value="{{.Form.Comment}}" placeholder="Comment" aria-label="Comment" maxlength="200">
-    <button>Add</button>
-  </form>
-  <p class="muted"><small>Destination: <code>internet</code>, an address like <code>192.168.1.10</code> or a network like <code>192.168.1.0/24</code>. <code>internet</code> means every public address: nothing on your home network, other devices or the Tunnelward server. Ports: one like <code>443</code> or a range like <code>8000-8100</code>.</small></p>
+  <footer class="rule-footer">
+    <form method="post" action="{{.BaseURL}}/rules" hx-post="{{.BaseURL}}/rules" hx-target="#rules" hx-swap="outerHTML" class="rule-form">
+      <input name="destination" value="{{.Form.Destination}}" placeholder="internet or 192.168.1.10" aria-label="Destination" required>
+      <select name="protocol" aria-label="Protocol">
+        {{- range protocols}}
+        <option value="{{.}}"{{if eq (print .) $.Form.Protocol}} selected{{end}}>{{protoLabel .}}</option>
+        {{- end}}
+      </select>
+      <input name="ports" value="{{.Form.Ports}}" placeholder="Ports" aria-label="Ports">
+      <input name="comment" value="{{.Form.Comment}}" placeholder="Comment" aria-label="Comment" maxlength="200">
+      <button>Add rule</button>
+    </form>
+    <p class="hint">Destination: <code>internet</code>, an address like <code>192.168.1.10</code> or a network like <code>192.168.1.0/24</code>.
+      <code>internet</code> means every public address, so nothing on your home network, other devices or the Tunnelward server.
+      Ports: one like <code>443</code> or a range like <code>8000-8100</code>, for TCP and UDP.</p>
+  </footer>
+</section>
 
-  {{- if .IsDevice}}
-  <h2>What this device can reach</h2>
+{{- if .IsDevice}}
+<section class="panel">
+  <header><h2>What this device can reach</h2></header>
   {{- if .Effective}}
-  <div class="overflow-auto">
+  <div class="table-wrap">
   <table>
-    <thead><tr><th>Destination</th><th>Protocol</th><th>Ports</th><th>From</th></tr></thead>
+    <thead><tr><th>Destination</th><th>Protocol</th><th>Ports</th><th>Allowed by</th></tr></thead>
     <tbody>
     {{- range .Effective}}
-      <tr><td>{{ruleDest .Rule}}</td><td>{{ruleProto .Rule}}</td><td>{{rulePorts .Rule}}</td><td>{{.Source}}</td></tr>
+      <tr><td>{{template "dest" .Rule}}</td><td>{{ruleProto .Rule}}</td><td class="mono">{{rulePorts .Rule}}</td><td>{{.Source}}</td></tr>
     {{- end}}
     </tbody>
   </table>
   </div>
   {{- else}}
-  <p>Nothing. This device can connect, but every packet is dropped.</p>
-  {{- end}}
+  <div class="body"><p>Nothing. The device can connect, but all its traffic is dropped.</p></div>
   {{- end}}
 </section>
-{{end}}
-
-{{define "status"}}
-{{- if .}}<span class="status{{if online .}} online{{end}}"></span>{{ago .LastHandshake}}
-{{- else}}<span class="status"></span>never{{end}}
 {{- end}}
+</div>
+{{end}}

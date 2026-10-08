@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -211,6 +212,7 @@ func (s *Server) startSession(w http.ResponseWriter) error {
 type page struct {
 	Title    string
 	LoggedIn bool
+	Nav      string // active section tab: devices, profiles or settings
 	Flash    string
 	Error    string
 	Data     any
@@ -227,6 +229,11 @@ var flashes = map[string]string{
 // parameter from a fixed list, so no user text is ever reflected.
 func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, name string, p page) {
 	p.LoggedIn = s.loggedIn(r)
+	for _, section := range []string{"devices", "profiles", "settings"} {
+		if r.URL.Path == "/"+section || strings.HasPrefix(r.URL.Path, "/"+section+"/") {
+			p.Nav = section
+		}
+	}
 	if p.Flash == "" {
 		p.Flash = flashes[r.URL.Query().Get("msg")]
 	}

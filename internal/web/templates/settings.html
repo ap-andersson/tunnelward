@@ -1,56 +1,68 @@
 {{define "content"}}{{with .Data}}
-<h1>Settings</h1>
 <form method="post" action="/settings">
-  <fieldset>
-    <legend><strong>How devices reach the server</strong></legend>
-    <div class="grid">
-      <label>Endpoint host
-        <input name="endpoint_host" value="{{.Settings.EndpointHost}}" placeholder="vpn.example.com" required>
-        <small>Your public host name or IP address.</small>
-      </label>
-      <label>Endpoint port
-        <input name="endpoint_port" type="number" min="1" max="65535" value="{{.Settings.EndpointPort}}" required>
-        <small>The UDP port forwarded to this server. Tunnelward itself listens on {{.ListenPort}}.</small>
-      </label>
+  <section class="panel">
+    <header><h1>Connection</h1></header>
+    <div class="body">
+      <div class="grid">
+        <label>Endpoint host
+          <input name="endpoint_host" value="{{.Settings.EndpointHost}}" placeholder="vpn.example.com" required>
+          <small class="hint">Your public host name or IP address.</small>
+        </label>
+        <label>Endpoint port
+          <input name="endpoint_port" type="number" min="1" max="65535" value="{{.Settings.EndpointPort}}" required>
+          <small class="hint">The UDP port your router forwards to this server.</small>
+        </label>
+      </div>
     </div>
-  </fieldset>
-  <fieldset>
-    <legend><strong>Tunnel</strong></legend>
-    <div class="grid">
-      <label>Tunnel network
-        <input name="tunnel_cidr" value="{{.TunnelCIDR}}" required>
-        <small>{{if .HasDevices}}Can only be changed to a network that still contains all device addresses.{{else}}Devices get addresses from this network.{{end}}</small>
-      </label>
-      <label>DNS servers for devices
-        <input name="client_dns" value="{{.ClientDNS}}" placeholder="e.g. 192.168.1.2">
-        <small>Optional. A DNS server on your LAN also needs a rule that lets devices reach it.</small>
-      </label>
+  </section>
+  <section class="panel">
+    <header><h2>Tunnel</h2></header>
+    <div class="body">
+      <div class="grid">
+        <label>Tunnel network
+          <input name="tunnel_cidr" value="{{.TunnelCIDR}}" class="mono" required>
+          <small class="hint">{{if .HasDevices}}Can only change to a network that still contains every device's address.{{else}}Devices get their addresses from this network.{{end}}</small>
+        </label>
+        <label>DNS servers for devices
+          <input name="client_dns" value="{{.ClientDNS}}" class="mono" placeholder="e.g. 192.168.1.2">
+          <small class="hint">Optional. A DNS server on your LAN also needs a rule that lets devices reach it.</small>
+        </label>
+      </div>
+      <div class="grid">
+        <label>MTU
+          <input name="mtu" type="number" min="0" max="9000" value="{{if .Settings.MTU}}{{.Settings.MTU}}{{end}}" placeholder="1420">
+          <small class="hint">Leave empty for the default.</small>
+        </label>
+        <label>Keepalive in seconds
+          <input name="keepalive" type="number" min="0" max="3600" value="{{.Settings.Keepalive}}">
+          <small class="hint">Keeps connections open behind NAT. 0 turns it off.</small>
+        </label>
+      </div>
     </div>
-    <div class="grid">
-      <label>MTU
-        <input name="mtu" type="number" min="0" max="9000" value="{{if .Settings.MTU}}{{.Settings.MTU}}{{end}}" placeholder="1420">
-        <small>Leave empty for the default.</small>
-      </label>
-      <label>Keepalive (seconds)
-        <input name="keepalive" type="number" min="0" max="3600" value="{{.Settings.Keepalive}}">
-        <small>Keeps connections alive behind NAT. 0 turns it off.</small>
-      </label>
-    </div>
-  </fieldset>
-  <button>Save</button>
-  <p class="muted"><small>DNS, MTU, keepalive and endpoint changes only reach devices with a newly generated config.</small></p>
+    <footer>
+      <button>Save settings</button>
+      <p class="hint">Changes to the endpoint, DNS, MTU and keepalive only reach devices with a newly generated config.</p>
+    </footer>
+  </section>
 </form>
 
-<h2>Server</h2>
-<p>Public key: <code class="key">{{.ServerPublicKey}}</code></p>
+<section class="panel">
+  <header><h2>Server</h2></header>
+  <dl class="facts">
+    <div><dt>Public key</dt><dd><code class="key">{{.ServerPublicKey}}</code></dd></div>
+    <div><dt>WireGuard listens on</dt><dd class="mono">UDP {{.ListenPort}}</dd></div>
+  </dl>
+</section>
 
-<h2>Admin password</h2>
-<form method="post" action="/settings/password">
-  <div class="grid">
-    <label>Current password <input type="password" name="current" autocomplete="current-password" required></label>
-    <label>New password <input type="password" name="password" autocomplete="new-password" minlength="8" required></label>
-    <label>Repeat new password <input type="password" name="confirm" autocomplete="new-password" minlength="8" required></label>
+<form method="post" action="/settings/password" class="panel">
+  <header><h2>Admin password</h2></header>
+  <div class="body">
+    <div class="grid">
+      <label>Current password <input type="password" name="current" autocomplete="current-password" required></label>
+      <label>New password <input type="password" name="password" autocomplete="new-password" minlength="8" required></label>
+      <label>Repeat new password <input type="password" name="confirm" autocomplete="new-password" minlength="8" required></label>
+    </div>
   </div>
-  <button class="secondary">Change password</button>
+  <footer><button>Change password</button><p class="hint">Changing it logs out every other session.</p></footer>
 </form>
 {{end}}{{end}}

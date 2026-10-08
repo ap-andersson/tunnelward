@@ -1,11 +1,11 @@
 {{define "content"}}
-<article>
-  <h1>Log in</h1>
-  <form method="post" action="/login">
+<form method="post" action="/login" class="panel narrow">
+  <header><h1>Log in</h1></header>
+  <div class="body">
     <label>Password
       <input type="password" name="password" autocomplete="current-password" required autofocus>
     </label>
-    <button>Log in</button>
-  </form>
-</article>
+  </div>
+  <footer><button>Log in</button></footer>
+</form>
 {{end}}

@@ -292,14 +292,14 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) confirmDeleteDevice(w http.ResponseWriter, r *http.Request) {
-	s.confirmDevice(w, r, "Delete device", "Delete %q? Its config stops working immediately. This can't be undone.", "delete", "Delete")
+	s.confirmDevice(w, r, "Delete device", "Delete %q? Its config stops working immediately. This can't be undone.", "delete", "Delete device", true)
 }
 
 func (s *Server) confirmRegenerate(w http.ResponseWriter, r *http.Request) {
-	s.confirmDevice(w, r, "New keys", "Generate new keys for %q? Its current config stops working, and you'll get a new one to install.", "regenerate", "Generate new keys")
+	s.confirmDevice(w, r, "New keys", "Generate new keys for %q? Its current config stops working, and you'll get a new one to install.", "regenerate", "Generate new keys", false)
 }
 
-func (s *Server) confirmDevice(w http.ResponseWriter, r *http.Request, title, question, action, button string) {
+func (s *Server) confirmDevice(w http.ResponseWriter, r *http.Request, title, question, action, button string, danger bool) {
 	id, ok := pathID(r, "id")
 	if !ok {
 		s.notFound(w, r)
@@ -315,6 +315,7 @@ func (s *Server) confirmDevice(w http.ResponseWriter, r *http.Request, title, qu
 		Question: fmt.Sprintf(question, d.Name),
 		Action:   base + "/" + action,
 		Button:   button,
+		Danger:   danger,
 		Cancel:   base,
 	}})
 }

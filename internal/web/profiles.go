@@ -145,7 +145,7 @@ func (s *Server) confirmDeleteProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	base := "/profiles/" + strconv.FormatInt(id, 10)
 	s.render(w, r, http.StatusOK, "confirm.html", page{Title: "Delete profile", Data: confirmData{
-		Question: q, Action: base + "/delete", Button: "Delete", Cancel: base,
+		Question: q, Action: base + "/delete", Button: "Delete profile", Danger: true, Cancel: base,
 	}})
 }
 

@@ -5,31 +5,54 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}'>
 <title>{{.Title}} · Tunnelward</title>
+<link rel="preload" href="/static/fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/pico.min.css">
 <link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
 <script src="/static/htmx.min.js" defer></script>
 </head>
 <body>
-<nav class="container top">
-  <ul><li><a href="/" class="brand"><strong>Tunnelward</strong></a></li></ul>
-  {{- if .LoggedIn}}
-  <ul>
-    <li><a href="/devices">Devices</a></li>
-    <li><a href="/profiles">Profiles</a></li>
-    <li><a href="/settings">Settings</a></li>
-    <li><form method="post" action="/logout" class="inline"><button class="secondary outline">Log out</button></form></li>
-  </ul>
-  {{- end}}
-</nav>
+<header class="band{{if not .LoggedIn}} bare{{end}}">
+  <div class="container">
+    <div class="brand-row">
+      <a href="/" class="wordmark">Tunnelward</a>
+      <div class="band-tools">
+        <label hidden>Theme
+          <select id="theme">
+            <option value="auto">Auto</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        {{- if .LoggedIn}}
+        <form method="post" action="/logout"><button>Log out</button></form>
+        {{- end}}
+      </div>
+    </div>
+    {{- if .LoggedIn}}
+    <nav class="tabs" aria-label="Sections">
+      <a href="/devices"{{if eq .Nav "devices"}} aria-current="page"{{end}}>Devices</a>
+      <a href="/profiles"{{if eq .Nav "profiles"}} aria-current="page"{{end}}>Profiles</a>
+      <a href="/settings"{{if eq .Nav "settings"}} aria-current="page"{{end}}>Settings</a>
+    </nav>
+    {{- end}}
+  </div>
+</header>
 <main class="container">
 {{- with .Flash}}
-<article class="flash" role="status">{{.}}</article>
+<div class="callout ok" role="status">{{template "i-check"}}<p>{{.}}</p></div>
 {{- end}}
 {{- with .Error}}
-<article class="error" role="alert">{{.}}</article>
+<div class="callout error" role="alert">{{template "i-alert"}}<p>{{.}}</p></div>
 {{- end}}
 {{template "content" .}}
 </main>
+<footer class="site">
+  <div class="container">
+    <span>Tunnelward, a WireGuard server with per-device access rules</span>
+    <a href="https://github.com/ap-andersson/tunnelward">{{template "i-github"}}Source on GitHub</a>
+  </div>
+</footer>
 </body>
 </html>
 {{end}}

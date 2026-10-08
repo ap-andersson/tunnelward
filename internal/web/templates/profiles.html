@@ -1,16 +1,26 @@
 {{define "content"}}
-<div class="actions"><h1>Profiles</h1><a href="/profiles/new" role="button">New profile</a></div>
-<p class="muted">A profile is a reusable set of rules. A device gets everything allowed by all its profiles plus its own custom rules.</p>
-<div class="overflow-auto">
-<table>
-  <thead><tr><th>Name</th><th>Description</th><th>Rules</th><th>Devices</th></tr></thead>
-  <tbody>
-  {{- range .Data}}
-    <tr><td><a href="/profiles/{{.ID}}">{{.Name}}</a></td><td>{{.Description}}</td><td>{{len .Rules}}</td><td>{{.Devices}}</td></tr>
-  {{- else}}
-    <tr><td colspan="4" class="muted">No profiles yet.</td></tr>
-  {{- end}}
-  </tbody>
-</table>
-</div>
+<section class="panel">
+  <header>
+    <h1>Profiles</h1>
+    <a href="/profiles/new" role="button" class="btn-sm">{{template "i-plus"}}New profile</a>
+  </header>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Name</th><th>Description</th><th>Rules</th><th>Devices</th></tr></thead>
+    <tbody>
+    {{- range .Data}}
+      <tr>
+        <td><a class="name" href="/profiles/{{.ID}}">{{.Name}}</a></td>
+        <td>{{.Description}}</td>
+        <td class="num">{{len .Rules}}</td>
+        <td class="num">{{.Devices}}</td>
+      </tr>
+    {{- else}}
+      <tr><td colspan="4" class="empty">No profiles yet.</td></tr>
+    {{- end}}
+    </tbody>
+  </table>
+  </div>
+  <footer><p class="hint">A profile is a reusable set of rules. A device gets everything allowed by all its profiles, plus its own custom rules.</p></footer>
+</section>
 {{end}}

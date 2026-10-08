@@ -1,10 +1,10 @@
 {{define "content"}}{{with .Data}}
-<article>
-  <h1>{{$.Title}}</h1>
-  <p>{{.Question}}</p>
-  <form method="post" action="{{.Action}}" class="actions">
-    <button>{{.Button}}</button>
+<form method="post" action="{{.Action}}" class="panel narrow">
+  <header><h1>{{$.Title}}</h1></header>
+  <div class="body"><p>{{.Question}}</p></div>
+  <footer>
+    <button{{if .Danger}} class="danger"{{end}}>{{.Button}}</button>
     <a href="{{.Cancel}}">Cancel</a>
-  </form>
-</article>
+  </footer>
+</form>
 {{end}}{{end}}

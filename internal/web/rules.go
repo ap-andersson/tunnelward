@@ -86,5 +86,6 @@ type confirmData struct {
 	Question string
 	Action   string // POST target
 	Button   string
+	Danger   bool   // style the button as destructive
 	Cancel   string // link back
 }

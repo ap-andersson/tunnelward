@@ -1,38 +1,52 @@
 {{define "content"}}{{with .Data}}
-<hgroup>
-  <h1>{{.Device.Name}}</h1>
-  <p>{{.Device.IP}} · {{if .Device.Enabled}}enabled{{else}}<mark>disabled</mark>{{end}} · last handshake {{template "status" .Status}}
-  {{- with .Status}} · {{bytes .ReceiveBytes}} up / {{bytes .TransmitBytes}} down{{end}}</p>
-</hgroup>
+<section class="panel">
+  <header>
+    <h1 class="title">{{.Device.Name}}</h1>
+    {{template "state" (state .Device.Enabled .Status)}}
+  </header>
+  <dl class="facts">
+    <div><dt>Tunnel address</dt><dd class="mono">{{.Device.IP}}</dd></div>
+    <div><dt>Last handshake</dt><dd>{{template "i-clock"}}{{if .Status}}{{ago .Status.LastHandshake}}{{else}}Never{{end}}</dd></div>
+    <div><dt>Sent by the device</dt><dd>{{template "i-up"}}{{with .Status}}{{bytes .ReceiveBytes}}{{else}}None{{end}}</dd></div>
+    <div><dt>Received by the device</dt><dd>{{template "i-down"}}{{with .Status}}{{bytes .TransmitBytes}}{{else}}None{{end}}</dd></div>
+  </dl>
+</section>
 
-<form method="post" action="/devices/{{.Device.ID}}">
-  <label>Name <input name="name" value="{{.Device.Name}}" maxlength="64" required></label>
-  <label><input type="checkbox" role="switch" name="enabled"{{if .Device.Enabled}} checked{{end}}> Enabled</label>
-  <fieldset>
-    <legend>Profiles</legend>
-    {{- range .Profiles}}
-    <label><input type="checkbox" name="profile" value="{{.ID}}"{{if index $.Data.Assigned .ID}} checked{{end}}> <a href="/profiles/{{.ID}}">{{.Name}}</a>
-      {{with .Description}}<small class="muted">{{.}}</small>{{end}}</label>
-    {{- else}}
-    <p class="muted">No profiles yet.</p>
-    {{- end}}
-  </fieldset>
-  <details>
-    <summary>Advanced</summary>
+<form method="post" action="/devices/{{.Device.ID}}" class="panel">
+  <header><h2>Device settings</h2></header>
+  <div class="body">
+    <label>Name <input name="name" value="{{.Device.Name}}" maxlength="64" required></label>
+    <label><input type="checkbox" role="switch" name="enabled"{{if .Device.Enabled}} checked{{end}}> Enabled</label>
+    <small class="hint">A disabled device can't connect. Its config and rules are kept.</small>
+    <fieldset class="checks">
+      <legend>Profiles</legend>
+      {{- range .Profiles}}
+      <label><input type="checkbox" name="profile" value="{{.ID}}"{{if index $.Data.Assigned .ID}} checked{{end}}> <a href="/profiles/{{.ID}}">{{.Name}}</a>
+        {{- with .Description}} <small>{{.}}</small>{{end}}</label>
+      {{- else}}
+      <p class="muted">No profiles yet.</p>
+      {{- end}}
+    </fieldset>
     <label>Client allowed IPs
-      <input name="allowed_ips" value="{{.AllowedIPs}}">
-      <small>What the device sends through the tunnel. The default, <code>0.0.0.0/0, ::/0</code>, sends everything,
-      so IPv6 is blocked in the tunnel instead of bypassing the VPN. Changing this only affects newly generated configs.</small>
+      <input name="allowed_ips" value="{{.AllowedIPs}}" class="mono">
+      <small class="hint">What the device sends through the tunnel. The default, <code>0.0.0.0/0, ::/0</code>, sends everything,
+      so IPv6 is blocked in the tunnel instead of bypassing the VPN. Only affects newly generated configs.</small>
     </label>
-  </details>
-  <button>Save</button>
+  </div>
+  <footer><button>Save changes</button></footer>
 </form>
 
 {{template "rules" .Rules}}
 
-<h2>Keys and removal</h2>
-<div class="actions">
-  <a href="/devices/{{.Device.ID}}/regenerate" role="button" class="secondary outline">Generate new keys</a>
-  <a href="/devices/{{.Device.ID}}/delete" role="button" class="secondary">Delete device</a>
-</div>
+<section class="panel">
+  <header><h2>Keys and removal</h2></header>
+  <div class="body">
+    <p class="muted">New keys replace this device's config: the old one stops working and you get a new one to install.
+    Deleting removes the device and its custom rules.</p>
+  </div>
+  <footer>
+    <a href="/devices/{{.Device.ID}}/regenerate" role="button" class="secondary outline btn-sm">{{template "i-key"}}Generate new keys</a>
+    <a href="/devices/{{.Device.ID}}/delete" role="button" class="danger outline btn-sm">{{template "i-trash"}}Delete device</a>
+  </footer>
+</section>
 {{end}}{{end}}

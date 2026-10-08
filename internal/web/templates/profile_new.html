@@ -1,9 +1,11 @@
 {{define "content"}}{{with .Data}}
-<h1>New profile</h1>
-<form method="post" action="/profiles">
-  <label>Name <input name="name" value="{{.Name}}" maxlength="64" placeholder="e.g. Home media" required autofocus></label>
-  <label>Description <input name="description" value="{{.Description}}" maxlength="200"></label>
-  <button>Create profile</button>
+<form method="post" action="/profiles" class="panel">
+  <header><h1>New profile</h1></header>
+  <div class="body">
+    <label>Name <input name="name" value="{{.Name}}" maxlength="64" placeholder="e.g. Home media" required autofocus></label>
+    <label>Description <input name="description" value="{{.Description}}" maxlength="200"></label>
+    <p class="hint">You can add rules after creating it.</p>
+  </div>
+  <footer><button>Create profile</button><a href="/profiles">Cancel</a></footer>
 </form>
-<p class="muted">You can add rules after creating it.</p>
 {{end}}{{end}}
