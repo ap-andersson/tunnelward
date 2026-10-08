@@ -124,14 +124,20 @@ Points to get right (each one gets a test):
   AllowedIPs, so `saddr` identifies the device. Server-side AllowedIPs for a peer are always exactly its
   tunnel /32, never anything wider.
 - **DNS**: if `client_dns` points at a LAN resolver, the UI warns when a device has no rule reaching it.
+- **No new connections into the tunnel** from the LAN or anywhere else; devices only receive replies.
+- **`internet` rules do not apply to the server itself** (input chain), so a host with a public IP
+  isn't reachable through them. Other rules apply to both forwarded traffic and the server.
+- **Docker on the same host**: Docker sets the iptables `FORWARD` policy to DROP. nftables evaluates
+  every base chain, so our accept doesn't override Docker's drop. To be handled in milestone 2
+  (e.g. a `DOCKER-USER` accept for the WG interface) and covered by a test.
 - **Fail closed**: if rendering or `nft -c` fails, nothing is applied and peers are not added/changed.
 
 ## IPv6 on the client side
 
 The server is IPv4 only, but clients often sit on IPv6-capable networks (mobile, hotel Wi-Fi).
 If a full-tunnel client routes only `0.0.0.0/0`, its IPv6 traffic bypasses the VPN entirely.
-Default: client configs include `::/0` so IPv6 enters the tunnel and is dropped, and apps fall
-back to IPv4 through the tunnel. (Final decision pending.)
+Decision: client configs include `::/0` by default, so IPv6 enters the tunnel and is dropped, and apps
+fall back to IPv4 through the tunnel. A device's client allowed IPs can still be edited by hand.
 
 ## Apply / reconcile flow
 
@@ -153,6 +159,7 @@ Firewall goes before WireGuard so a new peer never exists without its rules.
 
 ```
 cmd/tunnelward/       main: config, startup, reconcile, http server
+internal/model/       core types, validation, IP allocation (pure)
 internal/store/       SQLite, embedded migrations, queries
 internal/firewall/    ruleset rendering (pure) + apply via nft
 internal/wg/          interface + peer sync via netlink/wgctrl
