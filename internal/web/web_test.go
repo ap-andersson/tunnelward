@@ -317,7 +317,8 @@ func TestPagesRender(t *testing.T) {
 	for _, path := range []string{
 		"/devices", "/devices/new", "/devices/" + id, "/devices/" + id + "/delete", "/devices/" + id + "/regenerate",
 		"/profiles", "/profiles/new", "/profiles/1", "/profiles/1/delete", "/settings",
-		"/static/pico.min.css", "/static/htmx.min.js", "/static/app.css",
+		"/static/pico.min.css", "/static/htmx.min.js", "/static/app.css", "/static/theme.js",
+		"/static/logo.svg", "/static/favicon.svg", "/favicon.ico", "/apple-touch-icon.png",
 	} {
 		resp, body := e.get(path)
 		wantStatus(t, resp, body, http.StatusOK)

@@ -111,7 +111,11 @@ func (s *Server) parseTemplates() error {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	static, _ := fs.Sub(staticFS, "static")
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
+	files := cacheFor(time.Hour, http.FileServerFS(static))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", files))
+	// Browsers ask for these at the root, whatever the page says.
+	mux.Handle("GET /favicon.ico", files)
+	mux.Handle("GET /apple-touch-icon.png", files)
 
 	mux.HandleFunc("GET /setup", s.setupForm)
 	mux.HandleFunc("POST /setup", s.setup)
@@ -155,6 +159,16 @@ func (s *Server) Handler() http.Handler {
 	// CrossOriginProtection rejects cross-site POSTs (CSRF) using the
 	// browser's Sec-Fetch-Site / Origin headers.
 	return securityHeaders(http.NewCrossOriginProtection().Handler(mux))
+}
+
+// cacheFor lets browsers cache static files. Embedded files have no
+// modification time, so without this they'd be fetched on every page load.
+func cacheFor(d time.Duration, next http.Handler) http.Handler {
+	value := fmt.Sprintf("public, max-age=%d", int(d.Seconds()))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", value)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func securityHeaders(next http.Handler) http.Handler {
