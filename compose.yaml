@@ -19,9 +19,8 @@ services:
       # Admin UI. Replace with your server's LAN IP so it isn't exposed elsewhere:
       - "192.168.1.5:8080:8080"
     volumes:
-      - tunnelward-data:/data     # database and server key: back this up
+      # Database and server key, in a "data" folder next to this file. Back it up.
+      # Let Docker create the folder on first start (it must be owned by root).
+      - ./data:/data
     # environment:
     #   TW_COOKIE_SECURE: "true"  # if you serve the UI through an HTTPS reverse proxy
-
-volumes:
-  tunnelward-data:

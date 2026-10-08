@@ -75,7 +75,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
+	if err := checkDataDir(cfg.DataDir); err != nil {
 		return err
 	}
 	ensureForwarding()
@@ -132,6 +132,22 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// checkDataDir creates the data directory if needed and makes sure it is
+// writable, with a hint for the common Docker bind-mount mistake.
+func checkDataDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("data directory %s: %w", dir, err)
+	}
+	f, err := os.CreateTemp(dir, ".write-test-*")
+	if err != nil {
+		return fmt.Errorf("data directory %s is not writable: %w. "+
+			"The container runs without the capability to write to folders it doesn't own: "+
+			"let Docker create the folder, or make it owned by root (sudo chown -R root:root <folder>)", dir, err)
+	}
+	f.Close()
+	return os.Remove(f.Name())
 }
 
 // ensureForwarding turns on IPv4 forwarding if it is off. In Docker this

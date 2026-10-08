@@ -111,7 +111,8 @@ echo wireguard | sudo tee /etc/modules-load.d/wireguard.conf
 1. Get [`compose.yaml`](compose.yaml) onto your server, e.g. in a `tunnelward` directory.
 2. Change `192.168.1.5` in the admin UI port to **your server's LAN IP**, so the UI is only reachable
    on your home network.
-3. Start it:
+3. Start it. Docker creates the `data` folder next to `compose.yaml`; let it, rather than creating
+   the folder yourself (see [Troubleshooting](#troubleshooting)).
 
    ```sh
    docker compose up -d
@@ -154,21 +155,21 @@ a few environment variables:
 
 ## Backup and restore
 
-All state is in the `tunnelward-data` volume. `server.key` is the server's private key: keep
-backups somewhere safe.
+All state is in the `data` folder next to `compose.yaml`: the database (`tunnelward.db`) and the
+server's private key (`server.key`). The files are owned by root and the key is readable only by
+root, so use `sudo`, and keep backups somewhere safe.
 
 ```sh
 # Backup
-docker run --rm -v tunnelward_tunnelward-data:/data:ro -v "$PWD":/backup alpine \
-  tar czf /backup/tunnelward-backup.tgz -C /data .
+docker compose stop
+sudo tar czf tunnelward-backup.tgz data
+docker compose start
 
-# Restore (with the container stopped)
-docker run --rm -v tunnelward_tunnelward-data:/data -v "$PWD":/backup alpine \
-  tar xzf /backup/tunnelward-backup.tgz -C /data
+# Restore
+docker compose stop
+sudo tar xzf tunnelward-backup.tgz
+docker compose start
 ```
-
-The volume name is prefixed with the compose project name, which is the directory name by default
-(`tunnelward` above). `docker volume ls` shows it.
 
 ## Updating
 
@@ -190,6 +191,11 @@ The database is migrated automatically on startup. Device configs keep working a
 - Check the endpoint host and port in Settings, and the UDP port forward on your router.
 - Changing endpoint, DNS, MTU or keepalive only affects newly generated configs. Generate new keys
   for existing devices to get an updated config.
+
+**`data directory /data is not writable`** in the log: the `data` folder isn't owned by root. The
+container runs with only the `NET_ADMIN` capability, so root inside it can't write to folders owned by
+someone else. Fix it with `sudo chown -R root:root data`, or remove the empty folder and let Docker
+create it. On hosts with SELinux (e.g. Fedora), also add `:Z` to the volume: `./data:/data:Z`.
 
 **`create interface wg0: operation not supported`** in the log: the WireGuard kernel module isn't
 loaded on the host. See [Requirements](#requirements).
