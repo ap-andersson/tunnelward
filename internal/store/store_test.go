@@ -49,7 +49,7 @@ func TestOpenSeedsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if set.TunnelCIDR != model.DefaultSettings.TunnelCIDR || set.ListenPort != 51820 {
+	if set.TunnelCIDR != model.DefaultSettings.TunnelCIDR || set.EndpointPort != 51820 {
 		t.Errorf("unexpected default settings: %+v", set)
 	}
 	profiles, err := s.ListProfiles(t.Context())

@@ -1,6 +1,6 @@
 CREATE TABLE settings (
     id            INTEGER PRIMARY KEY CHECK (id = 1),
-    listen_port   INTEGER NOT NULL,
+    endpoint_port INTEGER NOT NULL,
     endpoint_host TEXT    NOT NULL,
     tunnel_cidr   TEXT    NOT NULL,
     client_dns    TEXT    NOT NULL, -- comma-separated IPv4 addresses
@@ -8,7 +8,7 @@ CREATE TABLE settings (
     keepalive     INTEGER NOT NULL  -- seconds, 0 = off
 );
 
-INSERT INTO settings (id, listen_port, endpoint_host, tunnel_cidr, client_dns, mtu, keepalive)
+INSERT INTO settings (id, endpoint_port, endpoint_host, tunnel_cidr, client_dns, mtu, keepalive)
 VALUES (1, 51820, '', '10.8.0.0/24', '', 0, 25);
 
 CREATE TABLE devices (

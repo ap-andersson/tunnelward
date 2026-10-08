@@ -36,10 +36,10 @@ func (s *Store) UpdateSettings(ctx context.Context, set model.Settings) error {
 			dns[i] = a.String()
 		}
 		_, err = tx.ExecContext(ctx, `
-			UPDATE settings SET listen_port = ?, endpoint_host = ?, tunnel_cidr = ?,
+			UPDATE settings SET endpoint_port = ?, endpoint_host = ?, tunnel_cidr = ?,
 				client_dns = ?, mtu = ?, keepalive = ?
 			WHERE id = 1`,
-			set.ListenPort, set.EndpointHost, set.TunnelCIDR.String(),
+			set.EndpointPort, set.EndpointHost, set.TunnelCIDR.String(),
 			strings.Join(dns, ","), set.MTU, set.Keepalive)
 		return err
 	})
@@ -51,9 +51,9 @@ func getSettings(ctx context.Context, q querier) (model.Settings, error) {
 		cidr, dns string
 	)
 	err := q.QueryRowContext(ctx, `
-		SELECT listen_port, endpoint_host, tunnel_cidr, client_dns, mtu, keepalive
+		SELECT endpoint_port, endpoint_host, tunnel_cidr, client_dns, mtu, keepalive
 		FROM settings WHERE id = 1`,
-	).Scan(&set.ListenPort, &set.EndpointHost, &cidr, &dns, &set.MTU, &set.Keepalive)
+	).Scan(&set.EndpointPort, &set.EndpointHost, &cidr, &dns, &set.MTU, &set.Keepalive)
 	if err != nil {
 		return set, fmt.Errorf("read settings: %w", err)
 	}

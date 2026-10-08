@@ -184,7 +184,7 @@ func ValidatePublicKey(k string) error {
 
 // Settings is the server configuration stored in the database.
 type Settings struct {
-	ListenPort   int
+	EndpointPort int    // port clients connect to; may differ from the listen port behind a port forward
 	EndpointHost string // host name or address clients connect to
 	TunnelCIDR   netip.Prefix
 	ClientDNS    []netip.Addr
@@ -194,15 +194,15 @@ type Settings struct {
 
 // DefaultSettings are used for a fresh database.
 var DefaultSettings = Settings{
-	ListenPort: 51820,
-	TunnelCIDR: netip.MustParsePrefix("10.8.0.0/24"),
-	Keepalive:  25,
+	EndpointPort: 51820,
+	TunnelCIDR:   netip.MustParsePrefix("10.8.0.0/24"),
+	Keepalive:    25,
 }
 
 // Validate checks all settings fields.
 func (s *Settings) Validate() error {
-	if s.ListenPort < 1 || s.ListenPort > 65535 {
-		return fmt.Errorf("listen port: %d is out of range", s.ListenPort)
+	if s.EndpointPort < 1 || s.EndpointPort > 65535 {
+		return fmt.Errorf("endpoint port: %d is out of range", s.EndpointPort)
 	}
 	s.EndpointHost = strings.TrimSpace(s.EndpointHost)
 	if strings.ContainsFunc(s.EndpointHost, func(r rune) bool { return unicode.IsSpace(r) || r == '/' }) {

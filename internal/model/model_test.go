@@ -106,7 +106,7 @@ func TestSettingsValidate(t *testing.T) {
 		t.Fatalf("default settings invalid: %v", err)
 	}
 	bad := []func(*Settings){
-		func(s *Settings) { s.ListenPort = 0 },
+		func(s *Settings) { s.EndpointPort = 0 },
 		func(s *Settings) { s.TunnelCIDR = netip.MustParsePrefix("10.8.0.1/24") },
 		func(s *Settings) { s.TunnelCIDR = netip.MustParsePrefix("fd00::/64") },
 		func(s *Settings) { s.TunnelCIDR = netip.MustParsePrefix("10.0.0.0/8") },

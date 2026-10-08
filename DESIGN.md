@@ -30,7 +30,7 @@ Out of scope (deliberately):
 | Client keys | **Generated server-side, shown once, never stored** (only public key kept) |
 | Firewall | Generate nftables **text**, validate with `nft -c`, apply atomically with `nft -f` |
 | WireGuard | `wgctrl-go` to sync peers; interface created/owned by Tunnelward via netlink |
-| Deployment | Docker, `network_mode: host`, `cap_add: NET_ADMIN` |
+| Deployment | Docker, **bridge network** (not host), `cap_add: NET_ADMIN`; everything lives in the container's network namespace |
 | IP versions | **IPv4 only** inside the tunnel; IPv6 from peers is dropped (see below) |
 
 ## Data model
@@ -55,7 +55,8 @@ Rule  (allow only)
   comment
 
 Settings (single row)
-  listen_port, endpoint_host, tunnel_cidr,
+  endpoint_host, endpoint_port,   -- what clients connect to (e.g. router port forward)
+  tunnel_cidr,
   client_dns, mtu, keepalive
 ```
 
@@ -95,7 +96,7 @@ table inet tunnelward {
     type filter hook input priority filter; policy accept;
     iifname != "wg0" return
     ct state established,related accept
-    # traffic to the server host itself (incl. the admin UI) is denied unless a rule allows it
+    # traffic to the server itself (the container, incl. the admin UI) is denied unless a rule allows it
     meta nfproto ipv6 drop
     ip saddr vmap { ... }   # same per-device chains, input variant
     drop
@@ -118,8 +119,8 @@ Points to get right (each one gets a test):
 - **Default deny** for anything from `wg0` that no rule allows, including peer-to-peer.
 - **No IPv6 through the tunnel**: peers' server-side AllowedIPs are v4 only (WireGuard already drops
   v6 from them), and both chains drop IPv6 explicitly as a second layer.
-- **Traffic to the host itself** (input chain) is controlled too, not just forwarded traffic.
-  Otherwise an "internet only" device could still reach services on the VPN host, including the admin UI.
+- **Traffic to the server itself** (input chain) is controlled too, not just forwarded traffic.
+  Otherwise an "internet only" device could still reach the admin UI.
 - **Source spoofing**: WireGuard's cryptokey routing drops packets whose source isn't in the peer's
   AllowedIPs, so `saddr` identifies the device. Server-side AllowedIPs for a peer are always exactly its
   tunnel /32, never anything wider.
@@ -127,9 +128,6 @@ Points to get right (each one gets a test):
 - **No new connections into the tunnel** from the LAN or anywhere else; devices only receive replies.
 - **`internet` rules do not apply to the server itself** (input chain), so a host with a public IP
   isn't reachable through them. Other rules apply to both forwarded traffic and the server.
-- **Docker on the same host**: Docker sets the iptables `FORWARD` policy to DROP. nftables evaluates
-  every base chain, so our accept doesn't override Docker's drop. To be handled in milestone 2
-  (e.g. a `DOCKER-USER` accept for the WG interface) and covered by a test.
 - **Fail closed**: if rendering or `nft -c` fails, nothing is applied and peers are not added/changed.
 
 ## IPv6 on the client side
@@ -138,6 +136,22 @@ The server is IPv4 only, but clients often sit on IPv6-capable networks (mobile,
 If a full-tunnel client routes only `0.0.0.0/0`, its IPv6 traffic bypasses the VPN entirely.
 Decision: client configs include `::/0` by default, so IPv6 enters the tunnel and is dropped, and apps
 fall back to IPv4 through the tunnel. A device's client allowed IPs can still be edited by hand.
+
+## Docker networking
+
+Tunnelward runs on a normal Docker bridge network, like Firezone 0.7 and wg-easy. The WireGuard
+interface, the nftables table and IP forwarding all live in the **container's** network namespace:
+
+- `NET_ADMIN` only applies inside the container, so Tunnelward cannot touch the host's firewall.
+- From Docker's point of view, VPN traffic is ordinary outbound container traffic, so Docker's
+  `FORWARD` DROP policy, ufw and firewalld don't interfere.
+- "The server itself" (input chain) means the container. Services on the Docker host are reached
+  through its LAN IP and need a rule like any other LAN destination.
+- Double NAT (container, then host) is invisible in practice. LAN devices see the host's IP.
+- The container always listens on `TW_WG_PORT` (default 51820), published in compose. What clients
+  connect to (`endpoint_host:endpoint_port`) is a setting, since a router port forward may differ.
+- Requires the `wireguard` kernel module on the host (standard on Ubuntu) and the
+  `net.ipv4.ip_forward=1` sysctl on the container (allowed in bridge mode).
 
 ## Apply / reconcile flow
 
@@ -163,6 +177,7 @@ internal/model/       core types, validation, IP allocation (pure)
 internal/store/       SQLite, embedded migrations, queries
 internal/firewall/    ruleset rendering (pure) + apply via nft
 internal/wg/          interface + peer sync via netlink/wgctrl
+internal/reconcile/   database -> firewall + WireGuard, in a fail-closed order
 internal/auth/        password hashing, sessions, CSRF, rate limit
 internal/web/         handlers, templates, static (htmx)
 ```
@@ -176,7 +191,7 @@ internal/web/         handlers, templates, static (htmx)
 ## Milestones
 
 1. **Core**: store + model + firewall renderer with golden tests.
-2. **Host integration**: WG interface/peer sync, nft apply, startup reconcile, netns integration tests.
+2. **WireGuard + firewall integration**: WG interface/peer sync, nft apply, startup reconcile, netns integration tests.
 3. **Web UI**: login, devices (create → config + QR shown once), profiles, rules, settings.
 4. **Packaging**: Dockerfile, compose example, README.
 5. **Nice to have**: handshake/transfer stats per device, backup/export.
