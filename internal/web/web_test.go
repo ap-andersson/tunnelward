@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -22,11 +23,12 @@ import (
 const testPassword = "correct horse battery"
 
 type testEnv struct {
-	t       *testing.T
-	store   *store.Store
-	srv     *httptest.Server
-	client  *http.Client
-	applied atomic.Int32
+	t        *testing.T
+	store    *store.Store
+	srv      *httptest.Server
+	client   *http.Client
+	applied  atomic.Int32
+	applyErr atomic.Pointer[error] // when set, applying fails with it
 }
 
 func newEnv(t *testing.T) *testEnv {
@@ -39,8 +41,12 @@ func newEnv(t *testing.T) *testEnv {
 	e := &testEnv{t: t, store: st}
 	key, _ := wgtypes.GeneratePrivateKey()
 	ui, err := New(t.Context(), Config{
-		Store:           st,
-		Apply:           func(context.Context) error { e.applied.Add(1); return nil },
+		Store: st,
+		Apply: func(context.Context) error {
+			e.applied.Add(1)
+			return e.syncErr()
+		},
+		SyncError:       e.syncErr,
 		ServerPublicKey: key.PublicKey(),
 		ListenPort:      51820,
 	})
@@ -55,6 +61,13 @@ func newEnv(t *testing.T) *testEnv {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	return e
+}
+
+func (e *testEnv) syncErr() error {
+	if p := e.applyErr.Load(); p != nil {
+		return *p
+	}
+	return nil
 }
 
 func (e *testEnv) do(method, path string, form url.Values, header ...string) (*http.Response, string) {
@@ -373,3 +386,34 @@ func mustKey(t *testing.T) string {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+func TestApplyFailureIsShown(t *testing.T) {
+	e := newEnv(t)
+	e.setUp()
+	d := model.Device{Name: "phone", PublicKey: mustKey(t), Enabled: true}
+	if err := e.store.CreateDevice(t.Context(), &d); err != nil {
+		t.Fatal(err)
+	}
+	failure := errors.New("nft: conflicting intervals")
+	e.applyErr.Store(&failure)
+	base := "/devices/" + itoa(d.ID)
+
+	// Saved, then redirected without a success message.
+	resp, body := e.post(base+"/rules", url.Values{"destination": {"internet"}})
+	wantRedirect(t, resp, body, base)
+	_, body = e.get(base)
+	if !strings.Contains(body, "Not all changes are in effect") || !strings.Contains(body, "conflicting intervals") {
+		t.Errorf("out-of-sync banner missing:\n%s", body)
+	}
+	// htmx partials don't include the banner, so they say it themselves.
+	_, body = e.post(base+"/rules", url.Values{"destination": {"10.0.0.1"}}, "HX-Request", "true")
+	if !strings.Contains(body, "applying the change to WireGuard and the firewall failed") {
+		t.Errorf("partial lacks the apply failure:\n%s", body)
+	}
+
+	e.applyErr.Store(nil)
+	_, body = e.get(base)
+	if strings.Contains(body, "Not all changes are in effect") {
+		t.Error("banner still shown after applying succeeded")
+	}
+}

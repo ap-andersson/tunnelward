@@ -20,6 +20,7 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
+	"github.com/ap-andersson/tunnelward/internal/firewall"
 	"github.com/ap-andersson/tunnelward/internal/model"
 	"github.com/ap-andersson/tunnelward/internal/store"
 	"github.com/ap-andersson/tunnelward/internal/wg"
@@ -211,6 +212,26 @@ func integration(t *testing.T) {
 		{"disabled device is cut off", client1, "203.0.113.10:80", false},
 		{"laptop lost internet with its profile", client2, "203.0.113.10:80", false},
 	})
+
+	// When the firewall can't be updated, deleted devices still lose their
+	// peer, the error is reported, and the next successful attempt clears it.
+	if err := st.DeleteDevice(ctx, laptop.ID); err != nil {
+		t.Fatal(err)
+	}
+	firewall.NFT = "false" // a command that always fails
+	if err := r.Reconcile(ctx); err == nil {
+		t.Fatal("Reconcile succeeded although nft failed")
+	}
+	if r.Err() == nil {
+		t.Error("Err() is nil after a failed attempt")
+	}
+	if keys, _ := wg.PeerKeys("wg0"); len(keys) != 0 {
+		t.Errorf("deleted device's peer kept after a firewall error: %v", keys)
+	}
+	firewall.NFT = "nft"
+	if err := r.Reconcile(ctx); err != nil || r.Err() != nil {
+		t.Errorf("Reconcile after nft works again: %v (Err: %v)", err, r.Err())
+	}
 }
 
 // newNS creates a network namespace with loopback up.

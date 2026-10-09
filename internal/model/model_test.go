@@ -110,9 +110,19 @@ func TestSettingsValidate(t *testing.T) {
 		func(s *Settings) { s.TunnelCIDR = netip.MustParsePrefix("10.8.0.1/24") },
 		func(s *Settings) { s.TunnelCIDR = netip.MustParsePrefix("fd00::/64") },
 		func(s *Settings) { s.TunnelCIDR = netip.MustParsePrefix("10.0.0.0/8") },
+		func(s *Settings) { s.TunnelCIDR = netip.MustParsePrefix("192.0.0.0/16") },
+		func(s *Settings) { s.TunnelCIDR = netip.MustParsePrefix("8.8.0.0/16") },
+		func(s *Settings) { s.TunnelCIDR = netip.MustParsePrefix("127.0.0.0/16") },
 		func(s *Settings) { s.ClientDNS = []netip.Addr{netip.MustParseAddr("::1")} },
 		func(s *Settings) { s.MTU = 100 },
 		func(s *Settings) { s.EndpointHost = "vpn.example.com/x" },
+	}
+	for _, ok := range []string{"172.20.0.0/16", "192.168.200.0/24", "100.64.10.0/24"} {
+		s := DefaultSettings
+		s.TunnelCIDR = netip.MustParsePrefix(ok)
+		if err := s.Validate(); err != nil {
+			t.Errorf("tunnel network %s rejected: %v", ok, err)
+		}
 	}
 	for i, mutate := range bad {
 		s := DefaultSettings

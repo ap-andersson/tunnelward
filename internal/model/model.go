@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -203,6 +204,15 @@ type Settings struct {
 	Keepalive    int // seconds, 0 disables
 }
 
+// privateRanges are where the tunnel network may be. A public range would
+// capture real internet addresses.
+var privateRanges = []netip.Prefix{
+	netip.MustParsePrefix("10.0.0.0/8"),
+	netip.MustParsePrefix("172.16.0.0/12"),
+	netip.MustParsePrefix("192.168.0.0/16"),
+	netip.MustParsePrefix("100.64.0.0/10"),
+}
+
 // DefaultSettings are used for a fresh database.
 var DefaultSettings = Settings{
 	EndpointPort: 51820,
@@ -221,6 +231,11 @@ func (s *Settings) Validate() error {
 	}
 	if !s.TunnelCIDR.IsValid() || !s.TunnelCIDR.Addr().Is4() || s.TunnelCIDR != s.TunnelCIDR.Masked() {
 		return invalidf("tunnel network: must be a masked IPv4 prefix such as 10.8.0.0/24")
+	}
+	if !slices.ContainsFunc(privateRanges, func(p netip.Prefix) bool {
+		return p.Bits() <= s.TunnelCIDR.Bits() && p.Contains(s.TunnelCIDR.Addr())
+	}) {
+		return invalidf("tunnel network: must be inside a private range (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 or 100.64.0.0/10)")
 	}
 	if b := s.TunnelCIDR.Bits(); b < 16 || b > 29 {
 		return invalidf("tunnel network: prefix length must be between /16 and /29")

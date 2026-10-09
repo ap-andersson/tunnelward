@@ -205,6 +205,38 @@ func SyncPeers(name string, peers []Peer) error {
 	return nil
 }
 
+// RemovePeersExcept removes every peer that isn't in keep with exactly the
+// same IP. It never adds or changes peers, so it can only reduce access.
+// A missing interface means there is nothing to remove.
+func RemovePeersExcept(name string, keep []Peer) error {
+	c, err := wgctrl.New()
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	dev, err := c.Device(name)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read %s: %w", name, err)
+	}
+	allowed := make(map[wgtypes.Key]netip.Prefix, len(keep))
+	for _, p := range keep {
+		allowed[p.PublicKey] = netip.PrefixFrom(p.IP, 32)
+	}
+	var remove []wgtypes.PeerConfig
+	for _, p := range dev.Peers {
+		if prefix, ok := allowed[p.PublicKey]; !ok || !sameAllowedIPs(p.AllowedIPs, prefix) {
+			remove = append(remove, wgtypes.PeerConfig{PublicKey: p.PublicKey, Remove: true})
+		}
+	}
+	if len(remove) == 0 {
+		return nil
+	}
+	return c.ConfigureDevice(name, wgtypes.Config{Peers: remove})
+}
+
 // PeerKeys returns the public keys of the interface's current peers.
 func PeerKeys(name string) ([]wgtypes.Key, error) {
 	c, err := wgctrl.New()

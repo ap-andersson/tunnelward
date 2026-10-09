@@ -49,6 +49,13 @@ var renderCases = map[string]Config{
 			{ID: 4, Name: "Locked out\nnewline", IP: netip.MustParseAddr("10.8.0.5")},
 		},
 	},
+	// Not allowed by settings validation, but the renderer must still produce
+	// a valid set when the tunnel contains one of the non-public ranges.
+	"tunnel_contains_nonpublic": {
+		Interface:  "wg0",
+		TunnelCIDR: netip.MustParsePrefix("192.0.0.0/16"),
+		Peers:      []Peer{{ID: 1, Name: "x", IP: netip.MustParseAddr("192.0.1.2"), Rules: internetOnly()}},
+	},
 	"tunnel_outside_private": {
 		Interface:  "wg1",
 		TunnelCIDR: netip.MustParsePrefix("198.51.100.0/24"),

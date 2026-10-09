@@ -209,11 +209,22 @@ func writeDispatch(w *writer, peers []Peer, kind string) {
 	w.close()
 }
 
+// nonPublicElements returns NonPublic plus the tunnel network, without
+// overlaps (nft rejects overlapping elements in an interval set).
 func nonPublicElements(tunnel netip.Prefix) []string {
-	prefixes := slices.Clone(NonPublic)
-	covered := slices.ContainsFunc(prefixes, func(p netip.Prefix) bool {
-		return p.Bits() <= tunnel.Bits() && p.Contains(tunnel.Addr())
-	})
+	var prefixes []netip.Prefix
+	covered := false
+	for _, p := range NonPublic {
+		switch {
+		case p.Bits() <= tunnel.Bits() && p.Contains(tunnel.Addr()):
+			covered = true // the tunnel is inside this range
+			prefixes = append(prefixes, p)
+		case tunnel.Bits() < p.Bits() && tunnel.Contains(p.Addr()):
+			// this range is inside the tunnel, which is added instead
+		default:
+			prefixes = append(prefixes, p)
+		}
+	}
 	if !covered {
 		prefixes = append(prefixes, tunnel)
 		slices.SortFunc(prefixes, comparePrefix)

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"sync"
+	"time"
 
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
@@ -25,45 +26,103 @@ type Reconciler struct {
 	ListenPort int
 	PrivateKey wgtypes.Key
 
-	mu sync.Mutex
+	mu sync.Mutex // serializes applying
+
+	errMu   sync.Mutex
+	lastErr error // result of the last attempt
 }
 
 // Reconcile reads the database and applies it, in this order:
 //
-//  1. Render the firewall ruleset. Any error stops here, nothing changes.
+//  1. Render the firewall ruleset. Any error stops here.
 //  2. Apply the ruleset atomically. On error the old ruleset stays.
 //  3. Configure the interface and sync peers.
 //
 // The firewall goes first so a peer never exists without its rules: a new
 // peer's chain is in place before it is added, and a removed peer's packets
 // are dropped (unknown source) even before it is removed from WireGuard.
+//
+// If step 1 or 2 fails, peers that should no longer exist are still removed,
+// since that can only take access away. Nothing is added or changed.
 func (r *Reconciler) Reconcile(ctx context.Context) error {
+	return r.reconcile(ctx, slog.LevelInfo)
+}
+
+// Err returns the error of the last attempt, or nil if it succeeded. While
+// it is non-nil, the system doesn't match the database.
+func (r *Reconciler) Err() error {
+	r.errMu.Lock()
+	defer r.errMu.Unlock()
+	return r.lastErr
+}
+
+// Run re-applies the configuration until ctx ends: every retryEvery while
+// the last attempt failed, otherwise every refreshEvery. This retries failed
+// changes and repairs anything changed behind Tunnelward's back.
+func (r *Reconciler) Run(ctx context.Context, retryEvery, refreshEvery time.Duration) {
+	for {
+		wait := refreshEvery
+		if r.Err() != nil {
+			wait = retryEvery
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		r.reconcile(ctx, slog.LevelDebug)
+	}
+}
+
+func (r *Reconciler) reconcile(ctx context.Context, successLevel slog.Level) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	peers, err := r.apply(ctx)
+
+	r.errMu.Lock()
+	failedBefore := r.lastErr != nil
+	r.lastErr = err
+	r.errMu.Unlock()
+
+	switch {
+	case err != nil:
+		slog.Error("applying configuration failed, will retry", "err", err)
+	case failedBefore:
+		slog.Info("applied configuration after earlier failures", "interface", r.Interface, "peers", peers)
+	default:
+		slog.Log(ctx, successLevel, "applied configuration", "interface", r.Interface, "peers", peers)
+	}
+	return err
+}
+
+// apply does the work of one attempt and returns the number of peers.
+func (r *Reconciler) apply(ctx context.Context) (int, error) {
 	snap, err := r.Store.Snapshot(ctx)
 	if err != nil {
-		return fmt.Errorf("read database: %w", err)
+		return 0, fmt.Errorf("read database: %w", err)
 	}
 	want, err := Build(snap, r.Interface, r.ListenPort, r.PrivateKey)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	ruleset, err := firewall.Render(want.Firewall)
-	if err != nil {
-		return fmt.Errorf("render firewall: %w", err)
+	if err == nil {
+		err = firewall.Apply(ctx, ruleset)
 	}
-	if err := firewall.Apply(ctx, ruleset); err != nil {
-		return fmt.Errorf("apply firewall: %w", err)
+	if err != nil {
+		if perr := wg.RemovePeersExcept(r.Interface, want.Peers); perr != nil {
+			slog.Error("removing peers after a firewall error failed", "err", perr)
+		}
+		return 0, fmt.Errorf("firewall: %w", err)
 	}
 	if err := wg.EnsureInterface(want.Interface); err != nil {
-		return err
+		return 0, err
 	}
 	if err := wg.SyncPeers(r.Interface, want.Peers); err != nil {
-		return err
+		return 0, err
 	}
-	slog.Info("applied configuration", "interface", r.Interface, "peers", len(want.Peers))
-	return nil
+	return len(want.Peers), nil
 }
 
 // Desired is the full system state derived from a database snapshot.

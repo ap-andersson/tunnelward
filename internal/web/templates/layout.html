@@ -42,6 +42,11 @@
   </div>
 </header>
 <main class="container">
+{{- with .OutOfSync}}
+<div class="callout warn" role="alert">{{template "i-alert"}}<p><strong>Not all changes are in effect.</strong>
+  They are saved, but applying them to WireGuard and the firewall failed, so Tunnelward keeps retrying.
+  Last error: <span class="mono">{{.}}</span></p></div>
+{{- end}}
 {{- with .Flash}}
 <div class="callout ok" role="status">{{template "i-check"}}<p>{{.}}</p></div>
 {{- end}}

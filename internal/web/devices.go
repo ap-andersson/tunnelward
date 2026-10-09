@@ -139,7 +139,7 @@ func (s *Server) createDevice(w http.ResponseWriter, r *http.Request) {
 // once. The private key only exists in this response.
 func (s *Server) showConfig(w http.ResponseWriter, r *http.Request, d model.Device, priv wgtypes.Key, what string) {
 	ctx := r.Context()
-	applied := s.applyChanges(ctx)
+	s.applyChanges(ctx) // a failure shows as the out-of-sync banner
 	set, err := s.store.Settings(ctx)
 	if err != nil {
 		s.serverError(w, r, err)
@@ -170,9 +170,6 @@ func (s *Server) showConfig(w http.ResponseWriter, r *http.Request, d model.Devi
 		Download: template.URL("data:application/octet-stream;base64," + base64.StdEncoding.EncodeToString([]byte(conf))),
 		FileName: clientconf.FileName(d.Name),
 	}}
-	if !applied {
-		p.Error = flashes["apply-failed"]
-	}
 	w.Header().Set("Cache-Control", "no-store")
 	s.render(w, r, http.StatusOK, "device_config.html", p)
 }

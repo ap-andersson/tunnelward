@@ -94,13 +94,17 @@ func run() error {
 
 	r := &reconcile.Reconciler{Store: st, Interface: cfg.Interface, ListenPort: cfg.WGPort, PrivateKey: key}
 	if err := r.Reconcile(ctx); err != nil {
-		return err
+		// Keep going: the admin UI is needed to fix whatever is wrong, and
+		// nothing is allowed through until applying succeeds.
+		slog.Warn("starting the admin UI anyway; WireGuard stays down until the configuration applies")
 	}
+	go r.Run(ctx, 30*time.Second, 5*time.Minute)
 
 	ui, err := web.New(ctx, web.Config{
 		Store:           st,
 		Apply:           r.Reconcile,
 		Statuses:        func() (map[wgtypes.Key]wg.PeerStatus, error) { return wg.PeerStatuses(cfg.Interface) },
+		SyncError:       r.Err,
 		ServerPublicKey: key.PublicKey(),
 		ListenPort:      cfg.WGPort,
 		SecureCookies:   cfg.CookieSecure,

@@ -54,7 +54,7 @@ func (s *Server) finishRuleChange(w http.ResponseWriter, r *http.Request, id int
 	ctx := r.Context()
 	applyFailed := changed && !s.applyChanges(ctx)
 	if applyFailed {
-		msg = flashes["apply-failed"]
+		msg = applyFailedMsg
 	}
 	name, p, rules, err := load(ctx, id)
 	if err != nil {
@@ -74,7 +74,7 @@ func (s *Server) finishRuleChange(w http.ResponseWriter, r *http.Request, id int
 	case !changed:
 		s.render(w, r, http.StatusUnprocessableEntity, name, p)
 	case applyFailed:
-		s.redirect(w, r, rules.BaseURL+"?msg=apply-failed")
+		s.redirect(w, r, rules.BaseURL) // the out-of-sync banner explains it
 	default:
 		s.redirect(w, r, rules.BaseURL+"?msg=saved")
 	}

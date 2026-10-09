@@ -39,6 +39,7 @@ type Server struct {
 	store           *store.Store
 	apply           func(context.Context) error
 	statuses        func() (map[wgtypes.Key]wg.PeerStatus, error)
+	syncError       func() error
 	serverPublicKey wgtypes.Key
 	listenPort      int
 	secureCookies   bool
@@ -54,6 +55,7 @@ type Config struct {
 	Store           *store.Store
 	Apply           func(context.Context) error // reconcile after a change
 	Statuses        func() (map[wgtypes.Key]wg.PeerStatus, error)
+	SyncError       func() error // non-nil while the system doesn't match the database
 	ServerPublicKey wgtypes.Key
 	ListenPort      int  // shown in Settings
 	SecureCookies   bool // set when served over HTTPS (e.g. behind a proxy)
@@ -65,6 +67,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		store:           cfg.Store,
 		apply:           cfg.Apply,
 		statuses:        cfg.Statuses,
+		syncError:       cfg.SyncError,
 		serverPublicKey: cfg.ServerPublicKey,
 		listenPort:      cfg.ListenPort,
 		secureCookies:   cfg.SecureCookies,
@@ -229,20 +232,26 @@ type page struct {
 	Nav      string // active section tab: devices, profiles or settings
 	Flash    string
 	Error    string
-	Data     any
+	// OutOfSync is the last apply error while changes aren't in effect.
+	OutOfSync string
+	Data      any
 }
 
 var flashes = map[string]string{
 	"saved":            "Saved.",
 	"deleted":          "Deleted.",
 	"password-changed": "Password changed. Any other sessions were logged out.",
-	"apply-failed":     "Saved, but applying the change to WireGuard or the firewall failed. Check the logs.",
 }
 
 // render writes a full page. The flash message is picked by the "msg" query
 // parameter from a fixed list, so no user text is ever reflected.
 func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, name string, p page) {
 	p.LoggedIn = s.loggedIn(r)
+	if p.LoggedIn && s.syncError != nil {
+		if err := s.syncError(); err != nil {
+			p.OutOfSync = err.Error()
+		}
+	}
 	for _, section := range []string{"devices", "profiles", "settings"} {
 		if r.URL.Path == "/"+section || strings.HasPrefix(r.URL.Path, "/"+section+"/") {
 			p.Nav = section
@@ -285,21 +294,28 @@ func (s *Server) redirect(w http.ResponseWriter, r *http.Request, url string) {
 	http.Redirect(w, r, url, http.StatusSeeOther)
 }
 
+// applyFailedMsg is shown in htmx partials, which don't include the page's
+// out-of-sync banner.
+const applyFailedMsg = "Saved, but applying the change to WireGuard and the firewall failed. Tunnelward keeps retrying."
+
 // applyAndRedirect applies the configuration after a change and redirects
-// with a "saved"-style message, or a warning if applying failed.
+// with a "saved"-style message. If applying failed, the page's out-of-sync
+// banner explains it instead.
 func (s *Server) applyAndRedirect(w http.ResponseWriter, r *http.Request, url, msg string) {
 	if !s.applyChanges(r.Context()) {
-		msg = "apply-failed"
+		s.redirect(w, r, url)
+		return
 	}
 	s.redirect(w, r, fmt.Sprintf("%s?msg=%s", url, msg))
 }
 
+// applyChanges applies the configuration. It is detached from the request,
+// so closing the tab can't stop a change halfway. Errors are logged and
+// retried by the reconciler.
 func (s *Server) applyChanges(ctx context.Context) bool {
-	if err := s.apply(ctx); err != nil {
-		slog.Error("applying configuration failed", "err", err)
-		return false
-	}
-	return true
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+	defer cancel()
+	return s.apply(ctx) == nil
 }
 
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
