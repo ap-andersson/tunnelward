@@ -153,8 +153,8 @@ func parseRuleForm(r *http.Request) (model.Rule, ruleForm, error) {
 		if isRange {
 			rule.PortTo, err2 = strconv.Atoi(strings.TrimSpace(to))
 		}
-		if err1 != nil || err2 != nil {
-			return rule, f, formErrorf("ports: use a number like 443 or a range like 8000-8100")
+		if err1 != nil || err2 != nil || rule.PortFrom < 1 || rule.PortTo < 1 {
+			return rule, f, formErrorf("ports: use a number from 1 to 65535 like 443, or a range like 8000-8100")
 		}
 	}
 	return rule, f, nil

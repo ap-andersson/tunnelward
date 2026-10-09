@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/netip"
 	"slices"
 	"strings"
@@ -109,8 +110,10 @@ func setDeviceProfiles(ctx context.Context, tx *sql.Tx, deviceID int64, profileI
 	for _, pid := range profileIDs {
 		_, err := tx.ExecContext(ctx,
 			"INSERT OR IGNORE INTO device_profiles (device_id, profile_id) VALUES (?, ?)", deviceID, pid)
-		if err != nil {
-			return mapErr(err) // unknown profile -> ErrNotFound
+		if err = mapErr(err); errors.Is(err, ErrNotFound) {
+			return model.Invalidf("profiles: a selected profile no longer exists, please check the list again")
+		} else if err != nil {
+			return err
 		}
 	}
 	return nil

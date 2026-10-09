@@ -56,6 +56,13 @@ var renderCases = map[string]Config{
 		TunnelCIDR: netip.MustParsePrefix("192.0.0.0/16"),
 		Peers:      []Peer{{ID: 1, Name: "x", IP: netip.MustParseAddr("192.0.1.2"), Rules: internetOnly()}},
 	},
+	"exclude_public_ip": {
+		Interface:  "wg0",
+		TunnelCIDR: tunnel,
+		Peers:      []Peer{{ID: 1, Name: "x", IP: netip.MustParseAddr("10.8.0.2"), Rules: internetOnly()}},
+		// The first is already non-public and must not be added twice.
+		ExcludeFromInternet: []netip.Addr{netip.MustParseAddr("192.168.1.1"), netip.MustParseAddr("203.0.113.7")},
+	},
 	"tunnel_outside_private": {
 		Interface:  "wg1",
 		TunnelCIDR: netip.MustParsePrefix("198.51.100.0/24"),
@@ -155,5 +162,36 @@ nft list table inet ` + Table
 				t.Errorf("table not listed after loading:\n%s", out.String())
 			}
 		})
+	}
+}
+
+func TestReaches(t *testing.T) {
+	rules := []model.SourcedRule{
+		{Rule: model.Rule{Destination: model.Internet}},
+		{Rule: model.Rule{Destination: "192.168.1.2", Protocol: model.ProtoTCPUDP, PortFrom: 53}},
+		{Rule: model.Rule{Destination: "192.168.1.10", Protocol: model.ProtoTCP, PortFrom: 8000, PortTo: 8100}},
+	}
+	exclude := []netip.Addr{netip.MustParseAddr("203.0.113.7")}
+	tests := []struct {
+		dst   string
+		proto model.Protocol
+		port  int
+		want  bool
+	}{
+		{"1.1.1.1", model.ProtoUDP, 53, true},         // internet
+		{"203.0.113.7", model.ProtoTCP, 443, false},   // own public IP excluded
+		{"192.168.1.2", model.ProtoUDP, 53, true},     // tcp+udp rule
+		{"192.168.1.2", model.ProtoICMP, 0, false},    // wrong protocol
+		{"192.168.1.3", model.ProtoUDP, 53, false},    // not covered
+		{"192.168.1.10", model.ProtoTCP, 8050, true},  // in range
+		{"192.168.1.10", model.ProtoTCP, 8101, false}, // out of range
+		{"10.8.0.1", model.ProtoUDP, 53, false},       // server: internet doesn't reach it
+		{"10.8.0.3", model.ProtoTCP, 22, false},       // another device
+	}
+	for _, tt := range tests {
+		got := Reaches(rules, tunnel, exclude, netip.MustParseAddr(tt.dst), tt.proto, tt.port)
+		if got != tt.want {
+			t.Errorf("Reaches(%s %s/%d) = %v, want %v", tt.dst, tt.proto, tt.port, got, tt.want)
+		}
 	}
 }

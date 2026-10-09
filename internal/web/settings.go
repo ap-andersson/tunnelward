@@ -5,18 +5,23 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 
 	"github.com/ap-andersson/tunnelward/internal/model"
 )
 
 type settingsData struct {
-	Settings        model.Settings
-	TunnelCIDR      string
-	ClientDNS       string
+	Form            settingsForm
 	ServerPublicKey string
 	ListenPort      int
 	HasDevices      bool
+}
+
+// settingsForm holds the settings form fields as text, so a rejected form
+// can be shown again exactly as it was typed.
+type settingsForm struct {
+	EndpointHost, EndpointPort, TunnelCIDR, ClientDNS, MTU, Keepalive string
 }
 
 func (s *Server) settingsData(ctx context.Context) (settingsData, error) {
@@ -32,10 +37,19 @@ func (s *Server) settingsData(ctx context.Context) (settingsData, error) {
 	for i, a := range set.ClientDNS {
 		dns[i] = a.String()
 	}
+	mtu := ""
+	if set.MTU != 0 {
+		mtu = strconv.Itoa(set.MTU)
+	}
 	return settingsData{
-		Settings:        set,
-		TunnelCIDR:      set.TunnelCIDR.String(),
-		ClientDNS:       strings.Join(dns, ", "),
+		Form: settingsForm{
+			EndpointHost: set.EndpointHost,
+			EndpointPort: strconv.Itoa(set.EndpointPort),
+			TunnelCIDR:   set.TunnelCIDR.String(),
+			ClientDNS:    strings.Join(dns, ", "),
+			MTU:          mtu,
+			Keepalive:    strconv.Itoa(set.Keepalive),
+		},
 		ServerPublicKey: s.serverPublicKey.String(),
 		ListenPort:      s.listenPort,
 		HasDevices:      len(devices) > 0,
@@ -68,10 +82,15 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 			s.serverError(w, r, derr)
 			return
 		}
-		// Keep what was typed.
-		data.Settings.EndpointHost = r.PostFormValue("endpoint_host")
-		data.TunnelCIDR = r.PostFormValue("tunnel_cidr")
-		data.ClientDNS = r.PostFormValue("client_dns")
+		// Keep everything that was typed.
+		data.Form = settingsForm{
+			EndpointHost: r.PostFormValue("endpoint_host"),
+			EndpointPort: r.PostFormValue("endpoint_port"),
+			TunnelCIDR:   r.PostFormValue("tunnel_cidr"),
+			ClientDNS:    r.PostFormValue("client_dns"),
+			MTU:          r.PostFormValue("mtu"),
+			Keepalive:    r.PostFormValue("keepalive"),
+		}
 		s.render(w, r, http.StatusUnprocessableEntity, "settings.html", page{Title: "Settings", Error: msg, Data: data})
 		return
 	}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"path/filepath"
 	"strconv"
@@ -295,8 +296,12 @@ func TestRuleEditing(t *testing.T) {
 		t.Errorf("missing error or typed value:\n%s", body)
 	}
 	resp, body = e.post(base+"/rules", url.Values{"destination": {"10.0.0.1"}, "protocol": {"tcp"}, "ports": {"eighty"}}, htmx...)
-	if !strings.Contains(body, "use a number like 443") {
+	if !strings.Contains(body, "use a number from 1 to 65535") {
 		t.Errorf("missing ports error:\n%s", body)
+	}
+	_, body = e.post(base+"/rules", url.Values{"destination": {"10.0.0.1"}, "protocol": {"tcp"}, "ports": {"0"}}, htmx...)
+	if !strings.Contains(body, "use a number from 1 to 65535") {
+		t.Errorf("port 0 accepted:\n%s", body)
 	}
 
 	// Without htmx: redirect back to the page.
@@ -415,5 +420,55 @@ func TestApplyFailureIsShown(t *testing.T) {
 	_, body = e.get(base)
 	if strings.Contains(body, "Not all changes are in effect") {
 		t.Error("banner still shown after applying succeeded")
+	}
+}
+
+func TestSettingsErrorKeepsInput(t *testing.T) {
+	e := newEnv(t)
+	e.setUp()
+	resp, body := e.post("/settings", url.Values{
+		"endpoint_host": {"vpn.example.com"}, "endpoint_port": {"51821"}, "tunnel_cidr": {"8.8.0.0/24"},
+		"client_dns": {"192.168.1.2"}, "mtu": {"1380"}, "keepalive": {"15"},
+	})
+	wantStatus(t, resp, body, http.StatusUnprocessableEntity)
+	for _, want := range []string{"private range", `value="51821"`, `value="1380"`, `value="15"`, `value="8.8.0.0/24"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("rejected settings form lacks %q", want)
+		}
+	}
+}
+
+func TestDNSWarning(t *testing.T) {
+	e := newEnv(t)
+	e.setUp()
+	set, _ := e.store.Settings(t.Context())
+	set.ClientDNS = []netip.Addr{netip.MustParseAddr("192.168.1.2")}
+	if err := e.store.UpdateSettings(t.Context(), set); err != nil {
+		t.Fatal(err)
+	}
+	d := model.Device{Name: "phone", PublicKey: mustKey(t), Enabled: true, ProfileIDs: []int64{1}} // internet only
+	if err := e.store.CreateDevice(t.Context(), &d); err != nil {
+		t.Fatal(err)
+	}
+	base := "/devices/" + itoa(d.ID)
+	_, body := e.get(base)
+	if !strings.Contains(body, "reach the DNS server") {
+		t.Errorf("DNS warning missing:\n%s", body)
+	}
+	e.post(base+"/rules", url.Values{"destination": {"192.168.1.2"}, "protocol": {"tcp+udp"}, "ports": {"53"}})
+	_, body = e.get(base)
+	if strings.Contains(body, "reach the DNS server") {
+		t.Error("DNS warning still shown after adding a DNS rule")
+	}
+}
+
+func TestDeletedProfileMessage(t *testing.T) {
+	e := newEnv(t)
+	e.setUp()
+	e.setEndpoint()
+	resp, body := e.post("/devices", url.Values{"name": {"phone"}, "profile": {"99"}})
+	wantStatus(t, resp, body, http.StatusUnprocessableEntity)
+	if !strings.Contains(body, "no longer exists") || !strings.Contains(body, `value="phone"`) {
+		t.Errorf("missing message or lost input:\n%s", body)
 	}
 }

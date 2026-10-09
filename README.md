@@ -73,7 +73,11 @@ A rule has:
 | Ports       | empty (any), `443`, `8000-8100` (TCP and UDP only)          |
 
 `internet` means every public address. It excludes private ranges (your LAN, other devices, Docker
-networks) and the Tunnelward server, so "Internet only" really is internet only.
+networks), the Tunnelward server and your own public address, so "Internet only" really is internet
+only. Your public address is the endpoint host from Settings, looked up again every few minutes so a
+changing (dynamic DNS) address is followed. Without that, devices could reach your router and port
+forwards through it. If your local DNS answers the endpoint host with a LAN address (split DNS), use
+your public IP as the endpoint host instead, or that exclusion won't work.
 
 Example setup:
 
@@ -88,7 +92,7 @@ Example setup:
 - Your laptop: all three
 
 If you set a DNS server on your LAN in Settings (e.g. a Pi-hole), devices also need a rule that
-allows reaching it, like the DNS rule above.
+allows reaching it, like the DNS rule above. The device page warns when a device can't reach it.
 
 Devices route all their traffic through the tunnel by default (`0.0.0.0/0, ::/0`). Tunnelward is
 IPv4 only. IPv6 traffic enters the tunnel and is dropped there instead of bypassing the VPN, and

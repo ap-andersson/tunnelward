@@ -7,7 +7,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/netip"
+	"slices"
 	"sync"
 	"time"
 
@@ -30,6 +32,10 @@ type Reconciler struct {
 
 	errMu   sync.Mutex
 	lastErr error // result of the last attempt
+
+	// Last successful lookup of the endpoint host, guarded by mu.
+	endpointHost string
+	endpointIPs  []netip.Addr
 }
 
 // Reconcile reads the database and applies it, in this order:
@@ -106,6 +112,7 @@ func (r *Reconciler) apply(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	want.Firewall.ExcludeFromInternet = r.endpointAddrs(ctx, snap.Settings.EndpointHost)
 	ruleset, err := firewall.Render(want.Firewall)
 	if err == nil {
 		err = firewall.Apply(ctx, ruleset)
@@ -123,6 +130,39 @@ func (r *Reconciler) apply(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return len(want.Peers), nil
+}
+
+// endpointAddrs returns the IPv4 addresses of the endpoint host (your public
+// IP), which the internet alias excludes. If resolving fails, the last known
+// addresses are kept, so a DNS hiccup doesn't widen access. Called with mu held.
+func (r *Reconciler) endpointAddrs(ctx context.Context, host string) []netip.Addr {
+	if host == "" {
+		return nil
+	}
+	if a, err := netip.ParseAddr(host); err == nil {
+		return []netip.Addr{a.Unmap()}
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	found, err := net.DefaultResolver.LookupNetIP(ctx, "ip4", host)
+	if err != nil {
+		if host == r.endpointHost {
+			slog.Warn("looking up the endpoint host failed, keeping its last known address", "host", host, "err", err)
+			return r.endpointIPs
+		}
+		slog.Warn("looking up the endpoint host failed, so internet rules don't exclude your public IP yet", "host", host, "err", err)
+		return nil
+	}
+	addrs := make([]netip.Addr, len(found))
+	for i, a := range found {
+		addrs[i] = a.Unmap()
+	}
+	slices.SortFunc(addrs, netip.Addr.Compare)
+	if host != r.endpointHost || !slices.Equal(addrs, r.endpointIPs) {
+		slog.Info("excluding the endpoint's address from internet rules", "host", host, "addrs", addrs)
+	}
+	r.endpointHost, r.endpointIPs = host, addrs
+	return addrs
 }
 
 // Desired is the full system state derived from a database snapshot.

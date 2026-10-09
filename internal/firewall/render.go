@@ -51,6 +51,10 @@ type Config struct {
 	Interface  string // WireGuard interface, e.g. "wg0"
 	TunnelCIDR netip.Prefix
 	Peers      []Peer // enabled devices only
+	// ExcludeFromInternet are extra addresses the model.Internet alias must
+	// not include: the server's own public IP, so "internet only" devices
+	// can't reach the router or port forwards through hairpin NAT.
+	ExcludeFromInternet []netip.Addr
 }
 
 var interfaceName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,15}$`)
@@ -115,7 +119,7 @@ func Render(cfg Config) (string, error) {
 	w.open("set nonpublic")
 	w.line("type ipv4_addr")
 	w.line("flags interval")
-	w.line("elements = { %s }", strings.Join(nonPublicElements(cfg.TunnelCIDR), ", "))
+	w.line("elements = { %s }", strings.Join(nonPublicElements(cfg.TunnelCIDR, cfg.ExcludeFromInternet), ", "))
 	w.close()
 
 	w.line("")
@@ -209,9 +213,19 @@ func writeDispatch(w *writer, peers []Peer, kind string) {
 	w.close()
 }
 
-// nonPublicElements returns NonPublic plus the tunnel network, without
-// overlaps (nft rejects overlapping elements in an interval set).
-func nonPublicElements(tunnel netip.Prefix) []string {
+// nonPublicElements returns NonPublic plus the tunnel network and the
+// excluded addresses, without overlaps (nft rejects overlapping elements in
+// an interval set).
+func nonPublicElements(tunnel netip.Prefix, exclude []netip.Addr) []string {
+	prefixes := nonPublicPrefixes(tunnel, exclude)
+	out := make([]string, len(prefixes))
+	for i, p := range prefixes {
+		out[i] = p.String()
+	}
+	return out
+}
+
+func nonPublicPrefixes(tunnel netip.Prefix, exclude []netip.Addr) []netip.Prefix {
 	var prefixes []netip.Prefix
 	covered := false
 	for _, p := range NonPublic {
@@ -227,13 +241,53 @@ func nonPublicElements(tunnel netip.Prefix) []string {
 	}
 	if !covered {
 		prefixes = append(prefixes, tunnel)
-		slices.SortFunc(prefixes, comparePrefix)
 	}
-	out := make([]string, len(prefixes))
-	for i, p := range prefixes {
-		out[i] = p.String()
+	for _, a := range exclude {
+		if !a.Is4() || slices.ContainsFunc(prefixes, func(p netip.Prefix) bool { return p.Contains(a) }) {
+			continue
+		}
+		prefixes = append(prefixes, netip.PrefixFrom(a, 32))
 	}
-	return out
+	slices.SortFunc(prefixes, comparePrefix)
+	return prefixes
+}
+
+// Reaches reports whether rules let a device reach dst with proto on port
+// (port 0 for ICMP), with the same meaning as the rendered ruleset. The
+// server's own tunnel address is treated like the input chain: internet
+// rules don't reach it.
+func Reaches(rules []model.SourcedRule, tunnel netip.Prefix, exclude []netip.Addr, dst netip.Addr, proto model.Protocol, port int) bool {
+	toServer := dst == tunnel.Addr().Next()
+	nonPublic := nonPublicPrefixes(tunnel, exclude)
+	for _, sr := range rules {
+		r := sr.Rule
+		if r.Normalize() != nil {
+			continue
+		}
+		if p, ok := r.DestinationPrefix(); ok {
+			if !p.Contains(dst) {
+				continue
+			}
+		} else if toServer || slices.ContainsFunc(nonPublic, func(p netip.Prefix) bool { return p.Contains(dst) }) {
+			continue
+		}
+		switch r.Protocol {
+		case model.ProtoAny:
+		case model.ProtoTCPUDP:
+			if proto != model.ProtoTCP && proto != model.ProtoUDP {
+				continue
+			}
+		default:
+			if r.Protocol != proto {
+				continue
+			}
+		}
+		if r.PortFrom != 0 && (port < r.PortFrom || port > r.PortTo) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 // mergedRule is a rule after de-duplication, with all its origins.

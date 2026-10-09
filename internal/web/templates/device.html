@@ -1,4 +1,9 @@
 {{define "content"}}{{with .Data}}
+{{- range .DNSUnreachable}}
+<div class="callout warn">{{template "i-alert"}}<p>This device can't reach the DNS server <span class="mono">{{.}}</span>,
+  so it can't look up names while connected. Add a rule here or in one of its profiles: destination
+  <span class="mono">{{.}}</span>, protocol TCP+UDP, port <span class="mono">53</span>.</p></div>
+{{- end}}
 <section class="panel">
   <header>
     <h1 class="title">{{.Device.Name}}</h1>

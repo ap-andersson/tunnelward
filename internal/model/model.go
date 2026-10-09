@@ -25,6 +25,12 @@ func invalidf(format string, args ...any) error {
 	return &ValidationError{fmt.Errorf(format, args...)}
 }
 
+// Invalidf returns a ValidationError, for input problems found outside this
+// package (e.g. a selected profile that was deleted meanwhile).
+func Invalidf(format string, args ...any) error {
+	return invalidf(format, args...)
+}
+
 // Protocol is the transport protocol a rule matches.
 type Protocol string
 

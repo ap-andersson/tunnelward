@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/netip"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -113,7 +114,7 @@ func TestDeviceLifecycle(t *testing.T) {
 	if _, err := s.Device(ctx, a.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("Device after delete: %v, want ErrNotFound", err)
 	}
-	if err := s.DeleteRule(ctx, r.ID); !errors.Is(err, ErrNotFound) {
+	if err := s.DeleteDeviceRule(ctx, a.ID, r.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("custom rule not deleted with its device: %v", err)
 	}
 
@@ -150,8 +151,9 @@ func TestDeviceConflictsAndValidation(t *testing.T) {
 		t.Error("server IP accepted")
 	}
 	bad = model.Device{Name: "other", PublicKey: randomKey(t), ProfileIDs: []int64{99}}
-	if err := s.CreateDevice(ctx, &bad); !errors.Is(err, ErrNotFound) {
-		t.Errorf("unknown profile: %v, want ErrNotFound", err)
+	var ve *model.ValidationError
+	if err := s.CreateDevice(ctx, &bad); !errors.As(err, &ve) {
+		t.Errorf("unknown profile: %v, want a ValidationError", err)
 	}
 	if devices, _ := s.ListDevices(ctx); len(devices) != 1 {
 		t.Errorf("failed creates left %d devices behind, want 1", len(devices))
@@ -219,11 +221,6 @@ func TestProfilesAndSnapshot(t *testing.T) {
 		t.Error("invalid rule accepted")
 	}
 
-	r.Protocol, r.PortFrom = model.ProtoTCP, 22
-	if err := s.UpdateRule(ctx, &r); err != nil {
-		t.Fatal(err)
-	}
-
 	d := newDevice(t, s, "laptop", 1, lan.ID)
 
 	snap, err := s.Snapshot(ctx)
@@ -251,6 +248,21 @@ func TestProfilesAndSnapshot(t *testing.T) {
 	}
 }
 
+func TestOddDataDirPath(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "a?b#c%d")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(t.Context(), filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if _, err := os.Stat(filepath.Join(dir, "test.db")); err != nil {
+		t.Errorf("database not created at the given path: %v", err)
+	}
+}
+
 func TestNotFound(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
@@ -261,8 +273,7 @@ func TestNotFound(t *testing.T) {
 		"DeleteDevice":  s.DeleteDevice(ctx, 42),
 		"UpdateProfile": s.UpdateProfile(ctx, &model.Profile{ID: 42, Name: "x"}),
 		"DeleteProfile": s.DeleteProfile(ctx, 42),
-		"UpdateRule":    s.UpdateRule(ctx, &model.Rule{ID: 42, Destination: "10.0.0.1"}),
-		"DeleteRule":    s.DeleteRule(ctx, 42),
+		"DeleteRule":    s.DeleteDeviceRule(ctx, 1, 42),
 	}
 	for name, err := range checks {
 		if !errors.Is(err, ErrNotFound) {

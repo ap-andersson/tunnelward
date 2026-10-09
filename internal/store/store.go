@@ -41,7 +41,9 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	q.Add("_pragma", "foreign_keys(1)")
 	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "busy_timeout(5000)")
-	db, err := sql.Open("sqlite", "file:"+path+"?"+q.Encode())
+	// The DSN is an SQLite URI, so characters with a meaning there are escaped.
+	escaped := strings.NewReplacer("%", "%25", "?", "%3F", "#", "%23").Replace(path)
+	db, err := sql.Open("sqlite", "file:"+escaped+"?"+q.Encode())
 	if err != nil {
 		return nil, err
 	}

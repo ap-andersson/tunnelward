@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,7 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
 	"github.com/ap-andersson/tunnelward/internal/clientconf"
+	"github.com/ap-andersson/tunnelward/internal/firewall"
 	"github.com/ap-andersson/tunnelward/internal/model"
 	"github.com/ap-andersson/tunnelward/internal/store"
 	"github.com/ap-andersson/tunnelward/internal/wg"
@@ -181,6 +183,9 @@ type deviceData struct {
 	AllowedIPs string
 	Status     *wg.PeerStatus
 	Rules      rulesData
+	// DNSUnreachable are configured DNS servers this device's rules don't
+	// reach, so it can't look up names while connected.
+	DNSUnreachable []netip.Addr
 }
 
 func (s *Server) deviceData(ctx context.Context, id int64) (deviceData, error) {
@@ -217,6 +222,11 @@ func (s *Server) deviceData(ctx context.Context, id int64) (deviceData, error) {
 	effective, err := model.EffectiveRules(d, snap.Profiles)
 	if err != nil {
 		return data, err
+	}
+	for _, dns := range snap.Settings.ClientDNS {
+		if !firewall.Reaches(effective, snap.Settings.TunnelCIDR, nil, dns, model.ProtoUDP, 53) {
+			data.DNSUnreachable = append(data.DNSUnreachable, dns)
+		}
 	}
 	data.Rules = rulesData{
 		BaseURL:   "/devices/" + strconv.FormatInt(id, 10),

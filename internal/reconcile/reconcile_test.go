@@ -45,3 +45,24 @@ func TestBuild(t *testing.T) {
 		t.Error("expected an error for an unknown profile")
 	}
 }
+
+func TestEndpointAddrs(t *testing.T) {
+	r := &Reconciler{}
+	ctx := t.Context()
+	if got := r.endpointAddrs(ctx, ""); got != nil {
+		t.Errorf("empty host: %v", got)
+	}
+	if got := r.endpointAddrs(ctx, "203.0.113.7"); len(got) != 1 || got[0].String() != "203.0.113.7" {
+		t.Errorf("IP literal: %v", got)
+	}
+	got := r.endpointAddrs(ctx, "localhost")
+	if len(got) == 0 || !got[0].IsLoopback() {
+		t.Fatalf("localhost: %v", got)
+	}
+	// A failed lookup of the same host keeps the last known addresses.
+	r.endpointHost = "does-not-resolve.invalid"
+	r.endpointIPs = []netip.Addr{netip.MustParseAddr("203.0.113.9")}
+	if got := r.endpointAddrs(ctx, "does-not-resolve.invalid"); len(got) != 1 || got[0].String() != "203.0.113.9" {
+		t.Errorf("failed lookup: %v, want the last known address", got)
+	}
+}

@@ -65,22 +65,6 @@ func (s *Store) AddDeviceRule(ctx context.Context, deviceID int64, r *model.Rule
 	return s.addRule(ctx, "device_id", deviceID, r)
 }
 
-// UpdateRule normalizes r and saves it. The rule keeps its owner.
-func (s *Store) UpdateRule(ctx context.Context, r *model.Rule) error {
-	if err := r.Normalize(); err != nil {
-		return err
-	}
-	return checkAffected(s.db.ExecContext(ctx, `
-		UPDATE rules SET destination = ?, protocol = ?, port_from = ?, port_to = ?, comment = ?
-		WHERE id = ?`,
-		r.Destination, r.Protocol, r.PortFrom, r.PortTo, r.Comment, r.ID))
-}
-
-// DeleteRule deletes a rule.
-func (s *Store) DeleteRule(ctx context.Context, id int64) error {
-	return checkAffected(s.db.ExecContext(ctx, "DELETE FROM rules WHERE id = ?", id))
-}
-
 // DeleteProfileRule deletes a rule only if it belongs to the profile.
 func (s *Store) DeleteProfileRule(ctx context.Context, profileID, ruleID int64) error {
 	return checkAffected(s.db.ExecContext(ctx,

@@ -5,11 +5,11 @@
     <div class="body">
       <div class="grid">
         <label>Endpoint host
-          <input name="endpoint_host" value="{{.Settings.EndpointHost}}" placeholder="vpn.example.com" required>
+          <input name="endpoint_host" value="{{.Form.EndpointHost}}" placeholder="vpn.example.com" required>
           <small class="hint">Your public host name or IP address.</small>
         </label>
         <label>Endpoint port
-          <input name="endpoint_port" type="number" min="1" max="65535" value="{{.Settings.EndpointPort}}" required>
+          <input name="endpoint_port" type="number" min="1" max="65535" value="{{.Form.EndpointPort}}" required>
           <small class="hint">The UDP port your router forwards to this server.</small>
         </label>
       </div>
@@ -20,21 +20,21 @@
     <div class="body">
       <div class="grid">
         <label>Tunnel network
-          <input name="tunnel_cidr" value="{{.TunnelCIDR}}" class="mono" required>
+          <input name="tunnel_cidr" value="{{.Form.TunnelCIDR}}" class="mono" required>
           <small class="hint">{{if .HasDevices}}Can only change to a network that still contains every device's address.{{else}}Devices get their addresses from this network.{{end}}</small>
         </label>
         <label>DNS servers for devices
-          <input name="client_dns" value="{{.ClientDNS}}" class="mono" placeholder="e.g. 192.168.1.2">
+          <input name="client_dns" value="{{.Form.ClientDNS}}" class="mono" placeholder="e.g. 192.168.1.2">
           <small class="hint">Optional. A DNS server on your LAN also needs a rule that lets devices reach it.</small>
         </label>
       </div>
       <div class="grid">
         <label>MTU
-          <input name="mtu" type="number" min="0" max="9000" value="{{if .Settings.MTU}}{{.Settings.MTU}}{{end}}" placeholder="1420">
+          <input name="mtu" type="number" min="0" max="9000" value="{{.Form.MTU}}" placeholder="1420">
           <small class="hint">Leave empty for the default.</small>
         </label>
         <label>Keepalive in seconds
-          <input name="keepalive" type="number" min="0" max="3600" value="{{.Settings.Keepalive}}">
+          <input name="keepalive" type="number" min="0" max="3600" value="{{.Form.Keepalive}}">
           <small class="hint">Keeps connections open behind NAT. 0 turns it off.</small>
         </label>
       </div>
