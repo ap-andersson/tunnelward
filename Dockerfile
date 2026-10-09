@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine3.24 AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine3.24 AS build
 ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -10,7 +10,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w" -o /out/tunnelward ./cmd/tunnelward
 
-FROM alpine:3.24
+FROM alpine:3.24.2
 # nft applies the firewall ruleset. Everything else talks netlink directly.
 RUN apk add --no-cache nftables
 COPY --from=build /out/tunnelward /usr/local/bin/tunnelward

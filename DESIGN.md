@@ -28,7 +28,7 @@ Out of scope (deliberately):
 | Auth | One admin account (bcrypt), set on a first-visit setup page; in-memory sessions, SameSite=Strict cookie, Go's `CrossOriginProtection` against CSRF, login rate limit |
 | Rule model | **Allow-only union**, default deny |
 | Client keys | **Generated server-side, shown once, never stored** (only public key kept) |
-| Firewall | Generate nftables **text**, validate with `nft -c`, apply atomically with `nft -f` |
+| Firewall | Generate nftables **text**, apply atomically with `nft -f` (all or nothing) |
 | WireGuard | `wgctrl-go` to sync peers; interface created/owned by Tunnelward via netlink |
 | Deployment | Docker, **bridge network** (not host), `cap_add: NET_ADMIN`; everything lives in the container's network namespace |
 | IP versions | **IPv4 only** inside the tunnel; IPv6 from peers is dropped (see below) |
@@ -65,7 +65,10 @@ Order never matters. Removing a profile can only ever *reduce* access.
 
 ### The `internet` alias
 "Anything except non-public ranges". Implemented as a negated nft set:
-10/8, 172.16/12, 192.168/16, 100.64/10, 169.254/16, 127/8, 0/8, 224/4, 240/4, and the tunnel subnet.
+10/8, 172.16/12, 192.168/16, 100.64/10, 169.254/16, 127/8, 0/8, 192.0.0/24, 198.18/15, 224/4, 240/4,
+the tunnel subnet, and the endpoint host's address (your own public IP). Excluding the public IP keeps
+devices away from the router and port forwards through hairpin NAT. It is looked up on every apply
+(also every 5 minutes, to follow dynamic DNS); if a lookup fails the last known address is kept.
 
 This lets a "family / internet-only" profile be a single rule.
 
@@ -130,9 +133,11 @@ Points to get right (each one gets a test):
   tunnel /32, never anything wider.
 - **DNS**: if `client_dns` points at a LAN resolver, the UI warns when a device has no rule reaching it.
 - **No new connections into the tunnel** from the LAN or anywhere else; devices only receive replies.
-- **`internet` rules do not apply to the server itself** (input chain), so a host with a public IP
-  isn't reachable through them. Other rules apply to both forwarded traffic and the server.
-- **Fail closed**: if rendering or `nft -c` fails, nothing is applied and peers are not added/changed.
+- **`internet` rules do not apply to the server itself** (input chain), i.e. the container. The
+  Docker host is reached like any other address, and your public IP is excluded from `internet`.
+  Other rules apply to both forwarded traffic and the server.
+- **Fail closed**: if rendering or `nft -f` fails, the old ruleset stays and no peers are added or
+  changed. Peers that should no longer exist are still removed, since that only takes access away.
 
 ## IPv6 on the client side
 
@@ -161,11 +166,16 @@ interface, the nftables table and IP forwarding all live in the **container's** 
 
 1. Any change in the UI → DB transaction commits.
 2. Build desired state from the DB.
-3. Render the nft ruleset → `nft -c -f` (check) → `nft -f` (apply).
-4. Sync WireGuard peers with `wgctrl` (`ReplacePeers: true`).
-5. On startup: ensure the interface exists, then run steps 2–4.
+3. Render the nft ruleset → `nft -f` (atomic).
+4. Ensure the interface, then sync WireGuard peers with `wgctrl` by diffing, so unchanged peers keep
+   their sessions.
+5. On startup run steps 2–4. If that fails, the admin UI still starts (WireGuard stays down).
 
 Firewall goes before WireGuard so a new peer never exists without its rules.
+
+Applying runs independently of the browser request, so closing a tab can't stop it halfway. A failed
+attempt is retried every 30 seconds, and the configuration is re-applied every 5 minutes anyway to
+repair drift. While the system doesn't match the database, the UI shows a banner with the error.
 
 ## Secrets
 
