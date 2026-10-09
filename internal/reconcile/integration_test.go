@@ -1,6 +1,7 @@
 package reconcile
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"io"
@@ -108,6 +109,7 @@ func integration(t *testing.T) {
 	}
 	for _, rule := range []model.Rule{
 		{Destination: "192.168.77.10", Protocol: model.ProtoTCP, PortFrom: 8096},
+		{Destination: "192.168.77.10", Protocol: model.ProtoTCP, PortFrom: 7},
 		{Destination: "10.8.0.1", Protocol: model.ProtoTCP, PortFrom: 9000},
 	} {
 		if err := st.AddDeviceRule(ctx, laptop.ID, &rule); err != nil {
@@ -132,6 +134,8 @@ func integration(t *testing.T) {
 	serve(t, inet, "203.0.113.10:80")
 	serve(t, server, "0.0.0.0:9000") // stands in for the admin UI
 	serve(t, client2, "10.8.0.3:80")
+	serveEcho(t, lan, "192.168.77.10:7")
+	serveEcho(t, inet, "203.0.113.10:7")
 
 	type check struct {
 		name    string
@@ -171,6 +175,10 @@ func integration(t *testing.T) {
 		{"LAN can't open connections into the tunnel", lan, "10.8.0.3:80", false},
 	})
 
+	// Connections that stay open across the changes below.
+	lanConn := openEcho(t, client2, "192.168.77.10:7")
+	inetConn := openEcho(t, client2, "203.0.113.10:7")
+
 	// Changes: disable one device, take a profile away from the other.
 	handshakeBefore := lastHandshake(t, laptop.PublicKey)
 	kid.Enabled = false
@@ -189,6 +197,13 @@ func integration(t *testing.T) {
 	}
 	if after := lastHandshake(t, laptop.PublicKey); !after.Equal(handshakeBefore) {
 		t.Errorf("laptop's session was reset by an unrelated change (handshake %v -> %v)", handshakeBefore, after)
+	}
+
+	if err := lanConn.echo(); err != nil {
+		t.Errorf("open connection the laptop is still allowed was cut: %v", err)
+	}
+	if err := inetConn.echo(); err == nil {
+		t.Error("open internet connection kept working after the laptop lost its internet profile")
 	}
 
 	run([]check{
@@ -354,6 +369,72 @@ func serve(t *testing.T, ns netns.NsHandle, addr string) {
 			c.Close()
 		}
 	}()
+}
+
+// serveEcho echoes every line back, on connections that stay open.
+func serveEcho(t *testing.T, ns netns.NsHandle, addr string) {
+	t.Helper()
+	var l net.Listener
+	err := inNS(ns, func() error {
+		var err error
+		l, err = net.Listen("tcp4", addr)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("listen %s: %v", addr, err)
+	}
+	t.Cleanup(func() { l.Close() })
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close()
+				s := bufio.NewScanner(c)
+				for s.Scan() {
+					c.Write([]byte(s.Text() + "\n"))
+				}
+			}()
+		}
+	}()
+}
+
+// echoConn is an open connection to an echo server.
+type echoConn struct {
+	c net.Conn
+	r *bufio.Reader
+}
+
+// openEcho connects from ns and checks one round trip.
+func openEcho(t *testing.T, ns netns.NsHandle, addr string) *echoConn {
+	t.Helper()
+	var c net.Conn
+	err := inNS(ns, func() error {
+		var err error
+		c, err = net.DialTimeout("tcp4", addr, 5*time.Second)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("connect to %s: %v", addr, err)
+	}
+	t.Cleanup(func() { c.Close() })
+	e := &echoConn{c: c, r: bufio.NewReader(c)}
+	if err := e.echo(); err != nil {
+		t.Fatalf("echo via %s: %v", addr, err)
+	}
+	return e
+}
+
+// echo sends a line and waits briefly for it to come back.
+func (e *echoConn) echo() error {
+	e.c.SetDeadline(time.Now().Add(time.Second))
+	if _, err := e.c.Write([]byte("ping\n")); err != nil {
+		return err
+	}
+	_, err := e.r.ReadString('\n')
+	return err
 }
 
 // dial connects to addr from ns and expects "ok". Expected-blocked

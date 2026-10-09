@@ -57,7 +57,8 @@ var interfaceName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,15}$`)
 
 // Render returns the nftables ruleset for cfg, to be fed to `nft -f`.
 //
-// Policy, for traffic arriving on the WireGuard interface:
+// Policy, for traffic arriving on the WireGuard interface (replies to
+// allowed connections always pass):
 //   - forward: a device may reach a destination only if one of its rules
 //     allows it. This includes other devices (peer-to-peer).
 //   - input (the server itself): same, except that model.Internet rules do
@@ -121,9 +122,9 @@ func Render(cfg Config) (string, error) {
 	w.open("chain forward")
 	w.line("type filter hook forward priority filter; policy accept;")
 	w.line("iifname != %s oifname != %s return", iface, iface)
-	w.line("ct state established,related accept")
 	w.line("ct state invalid drop")
-	w.line("# New connections from outside the tunnel to devices.")
+	writeReplyAccept(w)
+	w.line("# Anything else from outside the tunnel to devices.")
 	w.line("iifname != %s drop", iface)
 	w.line("meta nfproto ipv6 drop")
 	writeDispatch(w, peers, "fwd")
@@ -134,8 +135,8 @@ func Render(cfg Config) (string, error) {
 	w.open("chain input")
 	w.line("type filter hook input priority filter; policy accept;")
 	w.line("iifname != %s return", iface)
-	w.line("ct state established,related accept")
 	w.line("ct state invalid drop")
+	writeReplyAccept(w)
 	w.line("meta nfproto ipv6 drop")
 	writeDispatch(w, peers, "in")
 	w.line("drop")
@@ -179,6 +180,16 @@ var kindDescription = map[string]string{
 
 func chainName(kind string, id int64) string {
 	return fmt.Sprintf("%s_dev_%d", kind, id)
+}
+
+// writeReplyAccept lets replies through without checking rules. Only the
+// reply direction is accepted this way: every packet a device sends (the
+// original direction) goes through its rules, including packets of
+// connections that are already open, so removing a rule takes effect
+// immediately instead of when the connection ends.
+func writeReplyAccept(w *writer) {
+	w.line("# Replies skip the rules. Everything a device sends is checked, also on open connections.")
+	w.line("ct state established,related ct direction reply accept")
 }
 
 // writeDispatch jumps to the per-device chain matching the source address.

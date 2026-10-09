@@ -80,32 +80,33 @@ Sketch:
 
 ```nft
 table inet tunnelward {
-  set nonpublic4 { type ipv4_addr; flags interval; elements = { ... } }
+  set nonpublic { type ipv4_addr; flags interval; elements = { ... } }
 
   chain forward {
     type filter hook forward priority filter; policy accept;   # only judge wg traffic
-    iifname != "wg0" return
-    ct state established,related accept
+    iifname != "wg0" oifname != "wg0" return
     ct state invalid drop
+    ct state established,related ct direction reply accept     # only replies skip the rules
+    iifname != "wg0" drop                                       # nothing else into the tunnel
     meta nfproto ipv6 drop
-    ip saddr vmap { 10.8.0.2 : jump dev_1, 10.8.0.3 : jump dev_2 }
+    ip saddr vmap { 10.8.0.2 : jump fwd_dev_1, 10.8.0.3 : jump fwd_dev_2 }
     drop                                                        # unknown source / no match
   }
 
   chain input {
     type filter hook input priority filter; policy accept;
     iifname != "wg0" return
-    ct state established,related accept
+    ct state invalid drop
+    ct state established,related ct direction reply accept
     # traffic to the server itself (the container, incl. the admin UI) is denied unless a rule allows it
     meta nfproto ipv6 drop
-    ip saddr vmap { ... }   # same per-device chains, input variant
+    ip saddr vmap { 10.8.0.2 : jump in_dev_1, ... }            # same rules, minus "internet" ones
     drop
   }
 
-  chain dev_1 {
-    ip daddr != @nonpublic4 accept          # profile "Internet only"
-    ip daddr 192.168.1.10 tcp dport 8096 accept   # custom: Jellyfin
-    drop
+  chain fwd_dev_1 {
+    ip daddr != @nonpublic accept                    # profile "Internet only"
+    ip daddr 192.168.1.10 tcp dport 8096 accept      # custom: Jellyfin
   }
 
   chain postrouting {
@@ -117,6 +118,9 @@ table inet tunnelward {
 
 Points to get right (each one gets a test):
 - **Default deny** for anything from `wg0` that no rule allows, including peer-to-peer.
+- **Rule changes apply to open connections too**: only reply packets skip the rules (`ct direction
+  reply`). Everything a device sends is checked against its current rules, so removing a rule cuts
+  connections that are already open instead of letting them run until they close.
 - **No IPv6 through the tunnel**: peers' server-side AllowedIPs are v4 only (WireGuard already drops
   v6 from them), and both chains drop IPv6 explicitly as a second layer.
 - **Traffic to the server itself** (input chain) is controlled too, not just forwarded traffic.

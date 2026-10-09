@@ -16,9 +16,10 @@ table inet tunnelward {
 	chain forward {
 		type filter hook forward priority filter; policy accept;
 		iifname != "wg0" oifname != "wg0" return
-		ct state established,related accept
 		ct state invalid drop
-		# New connections from outside the tunnel to devices.
+		# Replies skip the rules. Everything a device sends is checked, also on open connections.
+		ct state established,related ct direction reply accept
+		# Anything else from outside the tunnel to devices.
 		iifname != "wg0" drop
 		meta nfproto ipv6 drop
 		ip saddr vmap {
@@ -30,8 +31,9 @@ table inet tunnelward {
 	chain input {
 		type filter hook input priority filter; policy accept;
 		iifname != "wg0" return
-		ct state established,related accept
 		ct state invalid drop
+		# Replies skip the rules. Everything a device sends is checked, also on open connections.
+		ct state established,related ct direction reply accept
 		meta nfproto ipv6 drop
 		ip saddr vmap {
 			10.8.0.2 : jump in_dev_1
