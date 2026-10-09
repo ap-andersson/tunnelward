@@ -161,7 +161,9 @@ func (s *Server) Handler() http.Handler {
 
 	// CrossOriginProtection rejects cross-site POSTs (CSRF) using the
 	// browser's Sec-Fetch-Site / Origin headers.
-	return securityHeaders(http.NewCrossOriginProtection().Handler(mux))
+	csrf := http.NewCrossOriginProtection()
+	csrf.SetDenyHandler(http.HandlerFunc(s.crossOriginDenied))
+	return securityHeaders(csrf.Handler(mux))
 }
 
 // cacheFor lets browsers cache static files. Embedded files have no
@@ -180,9 +182,25 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Content-Security-Policy",
 			"default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Referrer-Policy", "no-referrer")
+		// Not "no-referrer": with that, browsers send "Origin: null" on form
+		// posts, and over plain HTTP (no Sec-Fetch-Site header) the
+		// cross-origin check then rejects the UI's own forms.
+		h.Set("Referrer-Policy", "same-origin")
 		h.Set("X-Frame-Options", "DENY")
 		next.ServeHTTP(w, r)
+	})
+}
+
+// crossOriginDenied explains a rejected cross-origin request and logs what
+// the browser sent, which is what's needed to diagnose a false alarm.
+func (s *Server) crossOriginDenied(w http.ResponseWriter, r *http.Request) {
+	slog.Warn("blocked a request that looked cross-site",
+		"method", r.Method, "path", r.URL.Path, "host", r.Host,
+		"origin", r.Header.Get("Origin"), "sec_fetch_site", r.Header.Get("Sec-Fetch-Site"))
+	s.render(w, r, http.StatusForbidden, "message.html", page{
+		Title: "Request blocked",
+		Error: "This request was blocked because it looked like it came from another website. " +
+			"If you sent it from this page, reload the page and try again; the log has details.",
 	})
 }
 

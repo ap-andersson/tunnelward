@@ -206,6 +206,25 @@ func TestCrossSiteRequestsRejected(t *testing.T) {
 	}
 }
 
+// Over plain HTTP on a host name, browsers send no Sec-Fetch-Site header,
+// only Origin. The UI's own forms must still work.
+func TestSameOriginPostOverPlainHTTP(t *testing.T) {
+	e := newEnv(t)
+	origin := e.srv.URL // http://127.0.0.1:port, the same as the Host header
+	resp, body := e.post("/setup", url.Values{"password": {testPassword}, "confirm": {testPassword}}, "Origin", origin)
+	wantRedirect(t, resp, body, "/settings")
+
+	resp, _ = e.get("/settings")
+	if got := resp.Header.Get("Referrer-Policy"); got == "no-referrer" || got == "" {
+		t.Errorf("Referrer-Policy = %q; no-referrer makes browsers send Origin: null on form posts", got)
+	}
+	resp, body = e.post("/logout", url.Values{}, "Origin", "null")
+	wantStatus(t, resp, body, http.StatusForbidden)
+	if !strings.Contains(body, "looked like it came from another website") {
+		t.Errorf("unhelpful rejection page:\n%s", body)
+	}
+}
+
 func TestSecurityHeaders(t *testing.T) {
 	e := newEnv(t)
 	resp, _ := e.get("/setup")
