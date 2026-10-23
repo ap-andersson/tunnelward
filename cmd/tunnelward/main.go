@@ -105,6 +105,7 @@ func run() error {
 		Apply:           r.Reconcile,
 		Statuses:        func() (map[wgtypes.Key]wg.PeerStatus, error) { return wg.PeerStatuses(cfg.Interface) },
 		SyncError:       r.Err,
+		PublicIPs:       r.PublicIPs,
 		ServerPublicKey: key.PublicKey(),
 		ListenPort:      cfg.WGPort,
 		SecureCookies:   cfg.CookieSecure,

@@ -83,7 +83,7 @@ func (s *Server) profileData(ctx context.Context, id int64) (profileData, error)
 	return profileData{
 		Profile: p,
 		UsedBy:  devicesUsing(snap, id),
-		Rules:   rulesData{BaseURL: "/profiles/" + strconv.FormatInt(id, 10), Rules: p.Rules},
+		Rules:   rulesData{BaseURL: "/profiles/" + strconv.FormatInt(id, 10), Rules: p.Rules, PublicIPs: s.currentPublicIPs()},
 	}, nil
 }
 

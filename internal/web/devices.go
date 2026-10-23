@@ -223,8 +223,9 @@ func (s *Server) deviceData(ctx context.Context, id int64) (deviceData, error) {
 	if err != nil {
 		return data, err
 	}
+	publicIPs := s.currentPublicIPs()
 	for _, dns := range snap.Settings.ClientDNS {
-		if !firewall.Reaches(effective, snap.Settings.TunnelCIDR, nil, dns, model.ProtoUDP, 53) {
+		if !firewall.Reaches(effective, snap.Settings.TunnelCIDR, publicIPs, dns, model.ProtoUDP, 53) {
 			data.DNSUnreachable = append(data.DNSUnreachable, dns)
 		}
 	}
@@ -233,6 +234,7 @@ func (s *Server) deviceData(ctx context.Context, id int64) (deviceData, error) {
 		Rules:     d.Rules,
 		Effective: effective,
 		IsDevice:  true,
+		PublicIPs: publicIPs,
 	}
 	return data, nil
 }

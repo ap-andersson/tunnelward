@@ -13,6 +13,11 @@ table inet tunnelward {
 		elements = { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 224.0.0.0/4, 240.0.0.0/4 }
 	}
 
+	set publicip {
+		type ipv4_addr
+		# Your public IP isn't known, so public-ip rules match nothing.
+	}
+
 	chain forward {
 		type filter hook forward priority filter; policy accept;
 		iifname != "wg1" oifname != "wg1" return

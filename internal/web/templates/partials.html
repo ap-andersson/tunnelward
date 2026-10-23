@@ -19,7 +19,7 @@
   {{- if eq .Kind "online"}}{{template "i-online"}}{{else if eq .Kind "disabled"}}{{template "i-disabled"}}{{else}}{{template "i-offline"}}{{end}}
   {{- .Label}}</span>{{end}}
 
-{{define "dest"}}{{if eq .Destination "internet"}}Internet{{else}}<span class="mono">{{ruleDest .}}</span>{{end}}{{end}}
+{{define "dest"}}{{if or (eq .Destination "internet") (eq .Destination "public-ip")}}{{ruleDest .}}{{else}}<span class="mono">{{ruleDest .}}</span>{{end}}{{end}}
 
 {{/* The rules editor, shared by device and profile pages. htmx swaps the
      whole block; without JavaScript the forms post normally. */}}
@@ -54,7 +54,7 @@
   </div>
   <footer class="rule-footer">
     <form method="post" action="{{.BaseURL}}/rules" hx-post="{{.BaseURL}}/rules" hx-target="#rules" hx-swap="outerHTML" class="rule-form">
-      <input name="destination" value="{{.Form.Destination}}" placeholder="internet or 192.168.1.10" aria-label="Destination" required>
+      <input name="destination" value="{{.Form.Destination}}" placeholder="internet, public-ip or 192.168.1.10" aria-label="Destination" required>
       <select name="protocol" aria-label="Protocol">
         {{- range protocols}}
         <option value="{{.}}"{{if eq (print .) $.Form.Protocol}} selected{{end}}>{{protoLabel .}}</option>
@@ -64,8 +64,11 @@
       <input name="comment" value="{{.Form.Comment}}" placeholder="Comment" aria-label="Comment" maxlength="200">
       <button>Add rule</button>
     </form>
-    <p class="hint">Destination: <code>internet</code>, an address like <code>192.168.1.10</code> or a network like <code>192.168.1.0/24</code>.
+    <p class="hint">Destination: <code>internet</code>, <code>public-ip</code>, an address like <code>192.168.1.10</code> or a network like <code>192.168.1.0/24</code>.
       <code>internet</code> means every public address, so nothing on your home network, other devices, the Tunnelward server or your own public address.
+      <code>public-ip</code> is your own public address (the endpoint host in Settings), for reaching your services by their public names.
+      {{- with .PublicIPs}} It's currently <span class="mono">{{range $i, $a := .}}{{if $i}}, {{end}}{{$a}}{{end}}</span>.
+      {{- else}} It isn't known right now, so <code>public-ip</code> rules match nothing. Check that the endpoint host resolves to a public address.{{end}}
       Ports: one like <code>443</code> or a range like <code>8000-8100</code>, for TCP and UDP.</p>
   </footer>
 </section>

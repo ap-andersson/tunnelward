@@ -30,8 +30,9 @@ type Reconciler struct {
 
 	mu sync.Mutex // serializes applying
 
-	errMu   sync.Mutex
-	lastErr error // result of the last attempt
+	errMu     sync.Mutex
+	lastErr   error        // result of the last attempt
+	publicIPs []netip.Addr // what public-ip rules match, for the UI
 
 	// Last successful lookup of the endpoint host, guarded by mu.
 	endpointHost string
@@ -60,6 +61,14 @@ func (r *Reconciler) Err() error {
 	r.errMu.Lock()
 	defer r.errMu.Unlock()
 	return r.lastErr
+}
+
+// PublicIPs returns the addresses public-ip rules match as of the last
+// attempt: the endpoint host's public addresses.
+func (r *Reconciler) PublicIPs() []netip.Addr {
+	r.errMu.Lock()
+	defer r.errMu.Unlock()
+	return slices.Clone(r.publicIPs)
 }
 
 // Run re-applies the configuration until ctx ends: every retryEvery while
@@ -112,7 +121,10 @@ func (r *Reconciler) apply(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	want.Firewall.ExcludeFromInternet = r.endpointAddrs(ctx, snap.Settings.EndpointHost)
+	want.Firewall.PublicIPs = r.endpointAddrs(ctx, snap.Settings.EndpointHost)
+	r.errMu.Lock()
+	r.publicIPs = firewall.PublicOnly(want.Firewall.TunnelCIDR, want.Firewall.PublicIPs)
+	r.errMu.Unlock()
 	ruleset, err := firewall.Render(want.Firewall)
 	if err == nil {
 		err = firewall.Apply(ctx, ruleset)
@@ -133,7 +145,7 @@ func (r *Reconciler) apply(ctx context.Context) (int, error) {
 }
 
 // endpointAddrs returns the IPv4 addresses of the endpoint host (your public
-// IP), which the internet alias excludes. If resolving fails, the last known
+// IP), which the internet alias excludes and the public-ip alias matches. If resolving fails, the last known
 // addresses are kept, so a DNS hiccup doesn't widen access. Called with mu held.
 func (r *Reconciler) endpointAddrs(ctx context.Context, host string) []netip.Addr {
 	if host == "" {
@@ -150,7 +162,7 @@ func (r *Reconciler) endpointAddrs(ctx context.Context, host string) []netip.Add
 			slog.Warn("looking up the endpoint host failed, keeping its last known address", "host", host, "err", err)
 			return r.endpointIPs
 		}
-		slog.Warn("looking up the endpoint host failed, so internet rules don't exclude your public IP yet", "host", host, "err", err)
+		slog.Warn("looking up the endpoint host failed, so internet rules don't exclude your public IP and public-ip rules match nothing yet", "host", host, "err", err)
 		return nil
 	}
 	addrs := make([]netip.Addr, len(found))
@@ -159,7 +171,7 @@ func (r *Reconciler) endpointAddrs(ctx context.Context, host string) []netip.Add
 	}
 	slices.SortFunc(addrs, netip.Addr.Compare)
 	if host != r.endpointHost || !slices.Equal(addrs, r.endpointIPs) {
-		slog.Info("excluding the endpoint's address from internet rules", "host", host, "addrs", addrs)
+		slog.Info("looked up your public IP: excluded from internet rules, matched by public-ip rules", "host", host, "addrs", addrs)
 	}
 	r.endpointHost, r.endpointIPs = host, addrs
 	return addrs

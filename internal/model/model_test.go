@@ -13,6 +13,7 @@ func TestRuleNormalize(t *testing.T) {
 		want Rule
 	}{
 		{"internet alias", Rule{Destination: " Internet "}, Rule{Destination: Internet, Protocol: ProtoAny}},
+		{"public ip alias", Rule{Destination: "Public-IP", Protocol: ProtoTCP, PortFrom: 443}, Rule{Destination: PublicIP, Protocol: ProtoTCP, PortFrom: 443, PortTo: 443}},
 		{"bare address", Rule{Destination: "192.168.1.10"}, Rule{Destination: "192.168.1.10/32", Protocol: ProtoAny}},
 		{"network", Rule{Destination: "192.168.1.0/24", Protocol: ProtoICMP}, Rule{Destination: "192.168.1.0/24", Protocol: ProtoICMP}},
 		{"single port", Rule{Destination: "10.0.0.1", Protocol: ProtoTCP, PortFrom: 443}, Rule{Destination: "10.0.0.1/32", Protocol: ProtoTCP, PortFrom: 443, PortTo: 443}},

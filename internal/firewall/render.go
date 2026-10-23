@@ -51,10 +51,11 @@ type Config struct {
 	Interface  string // WireGuard interface, e.g. "wg0"
 	TunnelCIDR netip.Prefix
 	Peers      []Peer // enabled devices only
-	// ExcludeFromInternet are extra addresses the model.Internet alias must
-	// not include: the server's own public IP, so "internet only" devices
-	// can't reach the router or port forwards through hairpin NAT.
-	ExcludeFromInternet []netip.Addr
+	// PublicIPs are the server's own public addresses. The model.Internet
+	// alias excludes them, so "internet only" devices can't reach the router
+	// or port forwards through hairpin NAT. The model.PublicIP alias matches
+	// those of them that are public (see PublicOnly).
+	PublicIPs []netip.Addr
 }
 
 var interfaceName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,15}$`)
@@ -65,8 +66,9 @@ var interfaceName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,15}$`)
 // allowed connections always pass):
 //   - forward: a device may reach a destination only if one of its rules
 //     allows it. This includes other devices (peer-to-peer).
-//   - input (the server itself): same, except that model.Internet rules do
-//     not apply, so the server is only reachable through explicit rules.
+//   - input (the server itself): same, except that model.Internet and
+//     model.PublicIP rules do not apply, so the server is only reachable
+//     through rules naming its address.
 //   - IPv6 is always dropped.
 //
 // New connections from outside the tunnel to devices are dropped. Traffic
@@ -119,7 +121,21 @@ func Render(cfg Config) (string, error) {
 	w.open("set nonpublic")
 	w.line("type ipv4_addr")
 	w.line("flags interval")
-	w.line("elements = { %s }", strings.Join(nonPublicElements(cfg.TunnelCIDR, cfg.ExcludeFromInternet), ", "))
+	w.line("elements = { %s }", strings.Join(nonPublicElements(cfg.TunnelCIDR, cfg.PublicIPs), ", "))
+	w.close()
+
+	w.line("")
+	w.open("set publicip")
+	w.line("type ipv4_addr")
+	if public := PublicOnly(cfg.TunnelCIDR, cfg.PublicIPs); len(public) > 0 {
+		elems := make([]string, len(public))
+		for i, a := range public {
+			elems[i] = a.String()
+		}
+		w.line("elements = { %s }", strings.Join(elems, ", "))
+	} else {
+		w.line("# Your public IP isn't known, so public-ip rules match nothing.")
+	}
 	w.close()
 
 	w.line("")
@@ -159,7 +175,7 @@ func Render(cfg Config) (string, error) {
 			w.open("chain %s", chainName(kind, p.ID))
 			n := 0
 			for _, r := range merged[i] {
-				if kind == "in" && r.Destination == model.Internet {
+				if _, ok := r.DestinationPrefix(); kind == "in" && !ok {
 					continue
 				}
 				w.line("# %s", comment(r.origin))
@@ -252,13 +268,30 @@ func nonPublicPrefixes(tunnel netip.Prefix, exclude []netip.Addr) []netip.Prefix
 	return prefixes
 }
 
+// PublicOnly returns the addresses in addrs that are public IPv4 addresses
+// outside the tunnel, sorted. Only these are matched by model.PublicIP rules,
+// so an endpoint host that resolves to a LAN address (split DNS) doesn't
+// open that address.
+func PublicOnly(tunnel netip.Prefix, addrs []netip.Addr) []netip.Addr {
+	nonPublic := nonPublicPrefixes(tunnel, nil)
+	var out []netip.Addr
+	for _, a := range addrs {
+		if a.Is4() && !slices.Contains(out, a) && !slices.ContainsFunc(nonPublic, func(p netip.Prefix) bool { return p.Contains(a) }) {
+			out = append(out, a)
+		}
+	}
+	slices.SortFunc(out, netip.Addr.Compare)
+	return out
+}
+
 // Reaches reports whether rules let a device reach dst with proto on port
 // (port 0 for ICMP), with the same meaning as the rendered ruleset. The
-// server's own tunnel address is treated like the input chain: internet
-// rules don't reach it.
-func Reaches(rules []model.SourcedRule, tunnel netip.Prefix, exclude []netip.Addr, dst netip.Addr, proto model.Protocol, port int) bool {
+// server's own tunnel address is treated like the input chain: internet and
+// public-ip rules don't reach it.
+func Reaches(rules []model.SourcedRule, tunnel netip.Prefix, publicIPs []netip.Addr, dst netip.Addr, proto model.Protocol, port int) bool {
 	toServer := dst == tunnel.Addr().Next()
-	nonPublic := nonPublicPrefixes(tunnel, exclude)
+	nonPublic := nonPublicPrefixes(tunnel, publicIPs)
+	public := PublicOnly(tunnel, publicIPs)
 	for _, sr := range rules {
 		r := sr.Rule
 		if r.Normalize() != nil {
@@ -268,7 +301,13 @@ func Reaches(rules []model.SourcedRule, tunnel netip.Prefix, exclude []netip.Add
 			if !p.Contains(dst) {
 				continue
 			}
-		} else if toServer || slices.ContainsFunc(nonPublic, func(p netip.Prefix) bool { return p.Contains(dst) }) {
+		} else if toServer {
+			continue
+		} else if r.Destination == model.PublicIP {
+			if !slices.Contains(public, dst) {
+				continue
+			}
+		} else if slices.ContainsFunc(nonPublic, func(p netip.Prefix) bool { return p.Contains(dst) }) {
 			continue
 		}
 		switch r.Protocol {
@@ -340,19 +379,27 @@ func mergeRules(rules []model.SourcedRule) ([]mergedRule, error) {
 	return result, nil
 }
 
-// compareDestination orders the internet alias first, then prefixes.
+// compareDestination orders the internet alias first, then the public-ip
+// alias, then prefixes.
 func compareDestination(a, b model.Rule) int {
 	pa, okA := a.DestinationPrefix()
 	pb, okB := b.DestinationPrefix()
 	switch {
 	case !okA && !okB:
-		return 0
+		return cmp.Compare(aliasOrder(a.Destination), aliasOrder(b.Destination))
 	case !okA:
 		return -1
 	case !okB:
 		return 1
 	}
 	return comparePrefix(pa, pb)
+}
+
+func aliasOrder(dest string) int {
+	if dest == model.Internet {
+		return 0
+	}
+	return 1
 }
 
 func comparePrefix(a, b netip.Prefix) int {
@@ -363,11 +410,15 @@ func comparePrefix(a, b netip.Prefix) int {
 // Every value comes from a validated, typed field, never raw user text.
 func ruleExpr(r model.Rule) string {
 	var parts []string
-	if p, ok := r.DestinationPrefix(); !ok {
+	p, _ := r.DestinationPrefix()
+	switch {
+	case r.Destination == model.Internet:
 		parts = append(parts, "ip daddr != @nonpublic")
-	} else if p.IsSingleIP() {
+	case r.Destination == model.PublicIP:
+		parts = append(parts, "ip daddr @publicip")
+	case p.IsSingleIP():
 		parts = append(parts, "ip daddr "+p.Addr().String())
-	} else if p.Bits() > 0 {
+	case p.Bits() > 0:
 		parts = append(parts, "ip daddr "+p.String())
 	}
 

@@ -19,8 +19,11 @@ import (
 
 var funcs = template.FuncMap{
 	"ruleDest": func(r model.Rule) string {
-		if r.Destination == model.Internet {
+		switch r.Destination {
+		case model.Internet:
 			return "Internet"
+		case model.PublicIP:
+			return "Your public IP"
 		}
 		return strings.TrimSuffix(r.Destination, "/32")
 	},
@@ -167,6 +170,7 @@ type rulesData struct {
 	Rules     []model.Rule
 	Effective []model.SourcedRule // device pages only: everything the device may reach
 	IsDevice  bool
+	PublicIPs []netip.Addr // what public-ip rules match right now
 	Form      ruleForm
 	Error     string
 }

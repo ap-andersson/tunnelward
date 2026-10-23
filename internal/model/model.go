@@ -51,6 +51,12 @@ func (p Protocol) HasPorts() bool {
 // or otherwise non-public". See firewall.NonPublic for the exact ranges.
 const Internet = "internet"
 
+// PublicIP is the destination alias for "your own public address": the
+// endpoint host from Settings, looked up again on every apply. It lets
+// devices reach your services through their public names (hairpin NAT),
+// which Internet deliberately excludes.
+const PublicIP = "public-ip"
+
 const (
 	maxNameLen    = 64
 	maxCommentLen = 200
@@ -60,7 +66,7 @@ const (
 // everything not allowed by some rule is dropped.
 type Rule struct {
 	ID          int64
-	Destination string // Internet, or a masked IPv4 prefix such as "192.168.1.0/24"
+	Destination string // Internet, PublicIP, or a masked IPv4 prefix such as "192.168.1.0/24"
 	Protocol    Protocol
 	PortFrom    int // 0 means any port
 	PortTo      int // equal to PortFrom for a single port
@@ -72,9 +78,12 @@ type Rule struct {
 // PortTo == PortFrom.
 func (r *Rule) Normalize() error {
 	dest := strings.TrimSpace(r.Destination)
-	if strings.EqualFold(dest, Internet) {
+	switch {
+	case strings.EqualFold(dest, Internet):
 		r.Destination = Internet
-	} else {
+	case strings.EqualFold(dest, PublicIP):
+		r.Destination = PublicIP
+	default:
 		p, err := parseIPv4Prefix(dest)
 		if err != nil {
 			return invalidf("destination: %w", err)
@@ -113,9 +122,9 @@ func (r *Rule) Normalize() error {
 }
 
 // DestinationPrefix returns the destination as a prefix. ok is false for the
-// Internet alias.
+// Internet and PublicIP aliases.
 func (r Rule) DestinationPrefix() (p netip.Prefix, ok bool) {
-	if r.Destination == Internet {
+	if r.Destination == Internet || r.Destination == PublicIP {
 		return netip.Prefix{}, false
 	}
 	p, err := netip.ParsePrefix(r.Destination)
