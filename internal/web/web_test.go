@@ -30,6 +30,7 @@ type testEnv struct {
 	client   *http.Client
 	applied  atomic.Int32
 	applyErr atomic.Pointer[error] // when set, applying fails with it
+	publicIP atomic.Pointer[netip.Addr]
 }
 
 func newEnv(t *testing.T) *testEnv {
@@ -47,7 +48,13 @@ func newEnv(t *testing.T) *testEnv {
 			e.applied.Add(1)
 			return e.syncErr()
 		},
-		SyncError:       e.syncErr,
+		SyncError: e.syncErr,
+		PublicIPs: func() []netip.Addr {
+			if a := e.publicIP.Load(); a != nil {
+				return []netip.Addr{*a}
+			}
+			return nil
+		},
 		ServerPublicKey: key.PublicKey(),
 		ListenPort:      51820,
 	})
@@ -339,6 +346,33 @@ func TestRuleEditing(t *testing.T) {
 	wantStatus(t, resp, body, http.StatusOK)
 	if strings.Contains(body, "Jellyfin") {
 		t.Error("deleted rule still shown")
+	}
+}
+
+func TestPublicIPRule(t *testing.T) {
+	e := newEnv(t)
+	e.setUp()
+	p := model.Profile{Name: "Internal network"}
+	if err := e.store.CreateProfile(t.Context(), &p); err != nil {
+		t.Fatal(err)
+	}
+	base := "/profiles/" + itoa(p.ID)
+
+	resp, body := e.post(base+"/rules", url.Values{"destination": {"Public-IP"}, "protocol": {"tcp"}, "ports": {"443"}}, "HX-Request", "true")
+	wantStatus(t, resp, body, http.StatusOK)
+	if !strings.Contains(body, "Your public IP") || !strings.Contains(body, "isn't known right now") {
+		t.Errorf("missing rule or unknown-address hint:\n%s", body)
+	}
+	got, _ := e.store.Profile(t.Context(), p.ID)
+	if len(got.Rules) != 1 || got.Rules[0].Destination != model.PublicIP {
+		t.Fatalf("rules = %+v, want one public-ip rule", got.Rules)
+	}
+
+	a := netip.MustParseAddr("203.0.113.7")
+	e.publicIP.Store(&a)
+	_, body = e.get(base)
+	if !strings.Contains(body, "currently <span class=\"mono\">203.0.113.7</span>") {
+		t.Errorf("current public IP not shown:\n%s", body)
 	}
 }
 

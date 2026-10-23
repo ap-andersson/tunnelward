@@ -68,7 +68,7 @@ A rule has:
 
 | Field       | Examples                                                   |
 |-------------|------------------------------------------------------------|
-| Destination | `internet`, `192.168.1.10`, `192.168.1.0/24`               |
+| Destination | `internet`, `public-ip`, `192.168.1.10`, `192.168.1.0/24`  |
 | Protocol    | Any, TCP, UDP, TCP+UDP, ICMP                               |
 | Ports       | empty (any), `443`, `8000-8100` (TCP and UDP only)          |
 
@@ -79,13 +79,20 @@ changing (dynamic DNS) address is followed. Without that, devices could reach yo
 forwards through it. If your local DNS answers the endpoint host with a LAN address (split DNS), use
 your public IP as the endpoint host instead, or that exclusion won't work.
 
+`public-ip` is your own public address, the same lookup. Use it to reach your services through
+their public names (e.g. `https://service.example.com` forwarded by your router), which `internet`
+doesn't allow. For example, add `public-ip` TCP `443` to the profile of your own devices. This needs
+NAT reflection (hairpin NAT) on your router, and only works while the endpoint host resolves to a
+public address. The rules editor shows the address it currently matches. Like `internet`, it never
+reaches the Tunnelward server itself.
+
 Example setup:
 
 | Profile        | Rules                                                         |
 |----------------|---------------------------------------------------------------|
 | Internet only  | `internet` (created automatically)                            |
 | Home media     | `192.168.1.10` TCP `8096` (Jellyfin), `192.168.1.2` TCP+UDP `53` (DNS) |
-| Full LAN       | `192.168.1.0/24`                                              |
+| Full LAN       | `192.168.1.0/24`, `public-ip` TCP `443`                       |
 
 - Grandma's tablet: *Internet only* + *Home media*
 - Kid's phone: *Internet only*

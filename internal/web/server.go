@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"path"
 	"strconv"
 	"strings"
@@ -40,6 +41,7 @@ type Server struct {
 	apply           func(context.Context) error
 	statuses        func() (map[wgtypes.Key]wg.PeerStatus, error)
 	syncError       func() error
+	publicIPs       func() []netip.Addr
 	serverPublicKey wgtypes.Key
 	listenPort      int
 	secureCookies   bool
@@ -55,7 +57,8 @@ type Config struct {
 	Store           *store.Store
 	Apply           func(context.Context) error // reconcile after a change
 	Statuses        func() (map[wgtypes.Key]wg.PeerStatus, error)
-	SyncError       func() error // non-nil while the system doesn't match the database
+	SyncError       func() error        // non-nil while the system doesn't match the database
+	PublicIPs       func() []netip.Addr // what public-ip rules match; optional
 	ServerPublicKey wgtypes.Key
 	ListenPort      int  // shown in Settings
 	SecureCookies   bool // set when served over HTTPS (e.g. behind a proxy)
@@ -68,6 +71,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		apply:           cfg.Apply,
 		statuses:        cfg.Statuses,
 		syncError:       cfg.SyncError,
+		publicIPs:       cfg.PublicIPs,
 		serverPublicKey: cfg.ServerPublicKey,
 		listenPort:      cfg.ListenPort,
 		secureCookies:   cfg.SecureCookies,
@@ -325,6 +329,14 @@ func (s *Server) applyAndRedirect(w http.ResponseWriter, r *http.Request, url, m
 		return
 	}
 	s.redirect(w, r, fmt.Sprintf("%s?msg=%s", url, msg))
+}
+
+// currentPublicIPs returns what public-ip rules match right now.
+func (s *Server) currentPublicIPs() []netip.Addr {
+	if s.publicIPs == nil {
+		return nil
+	}
+	return s.publicIPs()
 }
 
 // applyChanges applies the configuration. It is detached from the request,

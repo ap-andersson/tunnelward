@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -61,7 +62,25 @@ var renderCases = map[string]Config{
 		TunnelCIDR: tunnel,
 		Peers:      []Peer{{ID: 1, Name: "x", IP: netip.MustParseAddr("10.8.0.2"), Rules: internetOnly()}},
 		// The first is already non-public and must not be added twice.
-		ExcludeFromInternet: []netip.Addr{netip.MustParseAddr("192.168.1.1"), netip.MustParseAddr("203.0.113.7")},
+		PublicIPs: []netip.Addr{netip.MustParseAddr("192.168.1.1"), netip.MustParseAddr("203.0.113.7")},
+	},
+	"public_ip": {
+		Interface:  "wg0",
+		TunnelCIDR: tunnel,
+		Peers: []Peer{{ID: 1, Name: "Laptop", IP: netip.MustParseAddr("10.8.0.2"), Rules: []model.SourcedRule{
+			{Rule: model.Rule{Destination: "192.168.1.0/24"}, Source: `profile "Internal network"`},
+			{Rule: model.Rule{Destination: model.PublicIP, Protocol: model.ProtoTCP, PortFrom: 443}, Source: `profile "Internal network"`},
+			{Rule: model.Rule{Destination: model.Internet}, Source: `profile "Internet only"`},
+		}}},
+		// Only the public address is matched by public-ip rules.
+		PublicIPs: []netip.Addr{netip.MustParseAddr("192.168.1.1"), netip.MustParseAddr("203.0.113.7")},
+	},
+	"public_ip_unknown": {
+		Interface:  "wg0",
+		TunnelCIDR: tunnel,
+		Peers: []Peer{{ID: 1, Name: "Laptop", IP: netip.MustParseAddr("10.8.0.2"), Rules: []model.SourcedRule{
+			{Rule: model.Rule{Destination: model.PublicIP}, Source: "custom"},
+		}}},
 	},
 	"tunnel_outside_private": {
 		Interface:  "wg1",
@@ -170,8 +189,10 @@ func TestReaches(t *testing.T) {
 		{Rule: model.Rule{Destination: model.Internet}},
 		{Rule: model.Rule{Destination: "192.168.1.2", Protocol: model.ProtoTCPUDP, PortFrom: 53}},
 		{Rule: model.Rule{Destination: "192.168.1.10", Protocol: model.ProtoTCP, PortFrom: 8000, PortTo: 8100}},
+		{Rule: model.Rule{Destination: model.PublicIP, Protocol: model.ProtoTCP, PortFrom: 443}},
 	}
-	exclude := []netip.Addr{netip.MustParseAddr("203.0.113.7")}
+	// The LAN address (split DNS) must not be matched by the public-ip rule.
+	publicIPs := []netip.Addr{netip.MustParseAddr("203.0.113.7"), netip.MustParseAddr("192.168.1.1")}
 	tests := []struct {
 		dst   string
 		proto model.Protocol
@@ -179,7 +200,9 @@ func TestReaches(t *testing.T) {
 		want  bool
 	}{
 		{"1.1.1.1", model.ProtoUDP, 53, true},         // internet
-		{"203.0.113.7", model.ProtoTCP, 443, false},   // own public IP excluded
+		{"203.0.113.7", model.ProtoTCP, 443, true},    // public-ip rule
+		{"203.0.113.7", model.ProtoTCP, 22, false},    // own public IP excluded from internet
+		{"192.168.1.1", model.ProtoTCP, 443, false},   // non-public lookup result
 		{"192.168.1.2", model.ProtoUDP, 53, true},     // tcp+udp rule
 		{"192.168.1.2", model.ProtoICMP, 0, false},    // wrong protocol
 		{"192.168.1.3", model.ProtoUDP, 53, false},    // not covered
@@ -189,9 +212,25 @@ func TestReaches(t *testing.T) {
 		{"10.8.0.3", model.ProtoTCP, 22, false},       // another device
 	}
 	for _, tt := range tests {
-		got := Reaches(rules, tunnel, exclude, netip.MustParseAddr(tt.dst), tt.proto, tt.port)
+		got := Reaches(rules, tunnel, publicIPs, netip.MustParseAddr(tt.dst), tt.proto, tt.port)
 		if got != tt.want {
 			t.Errorf("Reaches(%s %s/%d) = %v, want %v", tt.dst, tt.proto, tt.port, got, tt.want)
 		}
+	}
+}
+
+func TestPublicOnly(t *testing.T) {
+	addrs := []netip.Addr{
+		netip.MustParseAddr("203.0.113.9"),
+		netip.MustParseAddr("192.168.1.1"),
+		netip.MustParseAddr("10.8.0.5"),
+		netip.MustParseAddr("2001:db8::1"),
+		netip.MustParseAddr("203.0.113.7"),
+		netip.MustParseAddr("203.0.113.9"),
+	}
+	got := PublicOnly(tunnel, addrs)
+	want := []netip.Addr{netip.MustParseAddr("203.0.113.7"), netip.MustParseAddr("203.0.113.9")}
+	if !slices.Equal(got, want) {
+		t.Errorf("PublicOnly = %v, want %v", got, want)
 	}
 }

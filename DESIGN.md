@@ -49,7 +49,7 @@ Profile
 
 Rule  (allow only)
   id, owner (profile_id XOR device_id)
-  destination   -- IPv4 CIDR, or the built-in alias "internet"
+  destination   -- IPv4 CIDR, or the built-in aliases "internet" and "public-ip"
   protocol      -- any | tcp | udp | icmp
   ports         -- optional, single port or range, only for tcp/udp
   comment
@@ -72,6 +72,13 @@ devices away from the router and port forwards through hairpin NAT. It is looked
 
 This lets a "family / internet-only" profile be a single rule.
 
+### The `public-ip` alias
+Your own public IP: the same endpoint host lookup, minus any non-public answer (so split DNS can't
+turn it into a LAN address). Rendered as `ip daddr @publicip`, a named set that is empty while the
+address is unknown, so such rules then match nothing. It lets your own devices reach your services
+by their public names through hairpin NAT, e.g. `public-ip` TCP 443, without opening the router to
+everyone with `internet`.
+
 ## Firewall
 
 Tunnelward owns exactly one table, `table inet tunnelward`, and never touches other
@@ -84,6 +91,7 @@ Sketch:
 ```nft
 table inet tunnelward {
   set nonpublic { type ipv4_addr; flags interval; elements = { ... } }
+  set publicip { type ipv4_addr; elements = { ... } }      # your public IP, for "public-ip" rules
 
   chain forward {
     type filter hook forward priority filter; policy accept;   # only judge wg traffic
@@ -103,7 +111,7 @@ table inet tunnelward {
     ct state established,related ct direction reply accept
     # traffic to the server itself (the container, incl. the admin UI) is denied unless a rule allows it
     meta nfproto ipv6 drop
-    ip saddr vmap { 10.8.0.2 : jump in_dev_1, ... }            # same rules, minus "internet" ones
+    ip saddr vmap { 10.8.0.2 : jump in_dev_1, ... }            # same rules, minus "internet"/"public-ip" ones
     drop
   }
 
@@ -133,7 +141,7 @@ Points to get right (each one gets a test):
   tunnel /32, never anything wider.
 - **DNS**: if `client_dns` points at a LAN resolver, the UI warns when a device has no rule reaching it.
 - **No new connections into the tunnel** from the LAN or anywhere else; devices only receive replies.
-- **`internet` rules do not apply to the server itself** (input chain), i.e. the container. The
+- **`internet` and `public-ip` rules do not apply to the server itself** (input chain), i.e. the container. The
   Docker host is reached like any other address, and your public IP is excluded from `internet`.
   Other rules apply to both forwarded traffic and the server.
 - **Fail closed**: if rendering or `nft -f` fails, the old ruleset stays and no peers are added or
